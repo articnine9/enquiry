@@ -1,0 +1,327 @@
+'use client'
+
+import { useActionState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Save, X } from 'lucide-react'
+import { createEnquiry, updateEnquiry } from '../actions/enquiry.actions'
+import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
+import { SubmitButton } from '@/components/forms/SubmitButton'
+import { cn } from '@/lib/utils'
+import {
+  EnquirySource, EnquiryPriority, EnquiryCategory, EnquiryProduct,
+  ENQUIRY_SOURCE_LABELS, ENQUIRY_PRIORITY_LABELS, ENQUIRY_PRODUCT_LABELS,
+} from '@/types/enums'
+import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildAction(mode: 'create' | 'edit', id?: string) {
+  if (mode === 'create') return createEnquiry
+  return updateEnquiry.bind(null, id!)
+}
+
+// ── Prop types ────────────────────────────────────────────────────────────────
+
+interface EnquiryFormProps {
+  mode:       'create' | 'edit'
+  enquiry?:   EnquiryDocument        // only for edit mode
+  onCancel?:  () => void
+  onSuccess?: (enquiry: EnquiryDocument) => void
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function EnquiryForm({
+  mode,
+  enquiry,
+  onCancel,
+  onSuccess,
+}: EnquiryFormProps) {
+  const router = useRouter()
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const action = buildAction(mode, enquiry ? String(enquiry._id) : undefined)
+  const [state, formAction, isPending] = useActionState(action, null)
+
+  const isEdit = mode === 'edit'
+  const fe     = (!state?.ok && state?.fieldErrors) ? state.fieldErrors : {}
+
+  useEffect(() => {
+    if (!state) return
+    if (state.ok) {
+      toast.success(isEdit ? 'Enquiry updated' : 'Enquiry created')
+      onSuccess?.(state.data as EnquiryDocument)
+      if (!onSuccess) router.push(`/enquiries/${String((state.data as EnquiryDocument)._id)}`)
+    } else if (!state.fieldErrors) {
+      toast.error(state.error)
+    }
+  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Select options ─────────────────────────────────────────────────────────
+
+  const sourceOptions   = Object.values(EnquirySource).map((v) => ({ value: v, label: ENQUIRY_SOURCE_LABELS[v] }))
+  const priorityOptions = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
+  const productOptions  = Object.values(EnquiryProduct).map((v) => ({ value: v, label: ENQUIRY_PRODUCT_LABELS[v] }))
+  const categoryOptions = Object.values(EnquiryCategory).map((v) => ({
+    value: v, label: v.charAt(0).toUpperCase() + v.slice(1),
+  }))
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <form ref={formRef} action={formAction} noValidate className="space-y-8">
+
+      {/* ── Section: Customer Details ──────────────────────────────────────── */}
+      <Section title="Customer Details" subtitle="Contact information for the enquiry">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <FormField id="customerName" label="Full Name" required error={fe.customerName}>
+            <input
+              id="customerName" name="customerName" type="text"
+              defaultValue={enquiry?.customerName}
+              placeholder="e.g. Ahmad bin Razali"
+              disabled={isPending}
+              aria-describedby={fe.customerName ? 'customerName-error' : undefined}
+              className={inputClass(!!fe.customerName)}
+            />
+          </FormField>
+
+          <FormField id="phone" label="Phone Number" required error={fe.phone}>
+            <input
+              id="phone" name="phone" type="tel"
+              defaultValue={enquiry?.phone}
+              placeholder="+60 12-345 6789"
+              disabled={isPending}
+              className={inputClass(!!fe.phone)}
+            />
+          </FormField>
+
+          <FormField id="email" label="Email Address" error={fe.email}>
+            <input
+              id="email" name="email" type="email"
+              defaultValue={enquiry?.email}
+              placeholder="customer@email.com"
+              disabled={isPending}
+              className={inputClass(!!fe.email)}
+            />
+          </FormField>
+
+        </div>
+      </Section>
+
+      {/* ── Section: Address ──────────────────────────────────────────────── */}
+      <Section title="Location" subtitle="Customer's address and area details">
+        <div className="grid grid-cols-1 gap-4">
+
+          <FormField id="address" label="Street Address" required error={fe.address}>
+            <textarea
+              id="address" name="address"
+              defaultValue={enquiry?.address}
+              rows={2}
+              placeholder="No. 12, Jalan ABC, Taman XYZ"
+              disabled={isPending}
+              className={cn(inputClass(!!fe.address), 'resize-none')}
+            />
+          </FormField>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <FormField id="city" label="City" required error={fe.city}>
+              <input
+                id="city" name="city" type="text"
+                defaultValue={enquiry?.city}
+                placeholder="Kuala Lumpur"
+                disabled={isPending}
+                className={inputClass(!!fe.city)}
+              />
+            </FormField>
+
+            <FormField id="district" label="District" required error={fe.district}>
+              <input
+                id="district" name="district" type="text"
+                defaultValue={enquiry?.district}
+                placeholder="Cheras"
+                disabled={isPending}
+                className={inputClass(!!fe.district)}
+              />
+            </FormField>
+
+            <FormField id="pincode" label="Postcode" required error={fe.pincode}
+              hint="5-digit postcode">
+              <input
+                id="pincode" name="pincode" type="text"
+                defaultValue={enquiry?.pincode}
+                placeholder="55100"
+                maxLength={10}
+                disabled={isPending}
+                className={inputClass(!!fe.pincode)}
+              />
+            </FormField>
+          </div>
+
+          <FormField id="location" label="Area / Locality" required error={fe.location}
+            hint="Neighbourhood or landmark for auto-assignment">
+            <input
+              id="location" name="location" type="text"
+              defaultValue={enquiry?.location}
+              placeholder="Near Pavilion KL, Bukit Bintang"
+              disabled={isPending}
+              className={inputClass(!!fe.location)}
+            />
+          </FormField>
+
+        </div>
+      </Section>
+
+      {/* ── Section: Enquiry Details ──────────────────────────────────────── */}
+      <Section title="Enquiry Details" subtitle="Product, source, and priority">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <FormField id="enquirySource" label="Enquiry Source" required error={fe.enquirySource}>
+            <select
+              id="enquirySource" name="enquirySource"
+              defaultValue={enquiry?.enquirySource ?? EnquirySource.Web}
+              disabled={isPending}
+              className={selectClass(!!fe.enquirySource)}
+            >
+              {sourceOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="product" label="Product / Service" required error={fe.product}>
+            <select
+              id="product" name="product"
+              defaultValue={enquiry?.product ?? EnquiryProduct.Other}
+              disabled={isPending}
+              className={selectClass(!!fe.product)}
+            >
+              {productOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="category" label="Category" required error={fe.category}>
+            <select
+              id="category" name="category"
+              defaultValue={enquiry?.category ?? EnquiryCategory.General}
+              disabled={isPending}
+              className={selectClass(!!fe.category)}
+            >
+              {categoryOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="priority" label="Priority" required error={fe.priority}>
+            <select
+              id="priority" name="priority"
+              defaultValue={enquiry?.priority ?? EnquiryPriority.Medium}
+              disabled={isPending}
+              className={selectClass(!!fe.priority)}
+            >
+              {priorityOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <FormField id="subject" label="Subject" required error={fe.subject}>
+            <input
+              id="subject" name="subject" type="text"
+              defaultValue={enquiry?.subject}
+              placeholder="Brief description of the enquiry"
+              disabled={isPending}
+              className={inputClass(!!fe.subject)}
+            />
+          </FormField>
+
+          <FormField id="description" label="Description" error={fe.description}>
+            <textarea
+              id="description" name="description"
+              defaultValue={enquiry?.description}
+              rows={4}
+              placeholder="Detailed information about the customer's enquiry…"
+              disabled={isPending}
+              className={cn(inputClass(!!fe.description), 'resize-y min-h-[96px]')}
+            />
+          </FormField>
+
+          {isEdit && (
+            <FormField id="internalNotes" label="Internal Notes"
+              error={fe.internalNotes}
+              hint="Visible to staff and managers only — not shown to the customer">
+              <textarea
+                id="internalNotes" name="internalNotes"
+                defaultValue={(enquiry as EnquiryDocument & { internalNotes?: string })?.internalNotes}
+                rows={3}
+                placeholder="Internal notes for the team…"
+                disabled={isPending}
+                className={cn(inputClass(!!fe.internalNotes), 'resize-y')}
+              />
+            </FormField>
+          )}
+
+          <FormField id="tags" label="Tags"
+            error={fe.tags}
+            hint="Comma-separated, up to 10 tags">
+            <input
+              id="tags" name="tags" type="text"
+              defaultValue={enquiry?.tags?.join(', ')}
+              placeholder="urgent, rooftop, commercial"
+              disabled={isPending}
+              className={inputClass(!!fe.tags)}
+            />
+          </FormField>
+        </div>
+      </Section>
+
+      {/* ── Footer actions ─────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            <X className="w-4 h-4" />
+            Cancel
+          </button>
+        )}
+        <SubmitButton
+          label={isEdit ? 'Save Changes' : 'Create Enquiry'}
+          loadingLabel={isEdit ? 'Saving…' : 'Creating…'}
+          icon={<Save className="w-4 h-4" />}
+        />
+      </div>
+
+    </form>
+  )
+}
+
+// ── Section wrapper ───────────────────────────────────────────────────────────
+
+function Section({
+  title, subtitle, children,
+}: {
+  title: string; subtitle?: string; children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+      </div>
+      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+        {children}
+      </div>
+    </div>
+  )
+}
