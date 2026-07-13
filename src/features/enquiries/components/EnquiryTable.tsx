@@ -185,7 +185,8 @@ export default function EnquiryTable({
 
                   {/* Source */}
                   <td className="px-4 py-3 whitespace-nowrap hidden lg:table-cell text-xs text-slate-500 dark:text-slate-400">
-                    {ENQUIRY_SOURCE_LABELS[enquiry.enquirySource]}
+                    {ENQUIRY_SOURCE_LABELS[enquiry.enquirySource as keyof typeof ENQUIRY_SOURCE_LABELS]
+                      ?? enquiry.enquirySource?.replace(/_/g, ' ') ?? '—'}
                   </td>
 
                   {/* Product */}

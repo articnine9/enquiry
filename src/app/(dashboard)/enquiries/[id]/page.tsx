@@ -8,9 +8,8 @@ import { PriorityBadge } from '@/features/enquiries/components/PriorityBadge'
 import EnquiryDetailActions from '@/features/enquiries/components/EnquiryDetailActions'
 import FollowUpSection from '@/features/followups/components/FollowUpSection'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import {
-  UserRole, ENQUIRY_SOURCE_LABELS, ENQUIRY_PRODUCT_LABELS,
-} from '@/types/enums'
+import { labelFor, resolveMasterValue } from '@/features/settings/services/masterData.service'
+import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
 
@@ -40,6 +39,14 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
 
   const assignedUser = enquiry.assignedTo as unknown as { name: string; email: string } | null
 
+  // Resolve master-data labels for display
+  const [sourceLabel, productLabel, categoryLabel] = await Promise.all([
+    labelFor('enquiry_source',   enquiry.enquirySource),
+    labelFor('enquiry_product',  enquiry.product),
+    labelFor('enquiry_category', enquiry.category),
+  ])
+  const priorityRow = await resolveMasterValue('enquiry_priority', enquiry.priority)
+
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
       {/* Breadcrumb */}
@@ -62,7 +69,11 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={enquiry.status} />
-            <PriorityBadge priority={enquiry.priority} />
+            <PriorityBadge
+              priority={enquiry.priority}
+              color={priorityRow?.color}
+              label={priorityRow?.label}
+            />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
             {enquiry.subject || enquiry.customerName}
@@ -110,9 +121,9 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
           {/* Enquiry details */}
           <DetailCard title="Enquiry Details">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              <DetailField label="Source"   value={ENQUIRY_SOURCE_LABELS[enquiry.enquirySource]} />
-              <DetailField label="Product"  value={ENQUIRY_PRODUCT_LABELS[enquiry.product]} />
-              <DetailField label="Category" value={enquiry.category} />
+              <DetailField label="Source"   value={sourceLabel} />
+              <DetailField label="Product"  value={productLabel} />
+              <DetailField label="Category" value={categoryLabel} />
             </dl>
             {enquiry.description && (
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">

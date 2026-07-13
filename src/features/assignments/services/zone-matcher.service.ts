@@ -11,6 +11,7 @@
 import dbConnect from '@/lib/db/connection'
 import LocationZone, { type LocationZoneDocument } from '@/lib/db/models/LocationZone'
 import User from '@/lib/db/models/User'
+import { UserRole } from '@/types/enums'
 import { ZoneMatchTier } from '@/types/assignment.types'
 import type { ZoneResolution, StaffResolution } from '@/types/assignment.types'
 import type { Types } from 'mongoose'
@@ -50,6 +51,58 @@ export async function resolveZone(params: {
 
   // 4 — no zone found
   return { zone: null, matchTier: ZoneMatchTier.Global }
+}
+
+// ── Direct district / city staff resolution ───────────────────────────────────
+
+/**
+ * Match an enquiry directly to a staff member by their coverage area.
+ * Priority: district+city → district → city. Within a tier, the least-loaded
+ * active & available staff member wins. Returns null when nobody covers the area.
+ */
+export async function resolveStaffByArea(params: {
+  district?:   string
+  city?:       string
+  excludeIds?: Types.ObjectId[]
+}): Promise<{ staffId: Types.ObjectId; zoneId?: Types.ObjectId; tier: ZoneMatchTier } | null> {
+  await dbConnect()
+
+  const district = params.district?.trim()
+  const city     = params.city?.trim()
+  const excludeIds = params.excludeIds ?? []
+  if (!district && !city) return null
+
+  const base = {
+    role:        UserRole.Staff,
+    status:      'active',
+    isAvailable: true,
+    $expr:       { $lt: ['$currentLoad', '$maxLoad'] },
+    ...(excludeIds.length && { _id: { $nin: excludeIds } }),
+  }
+
+  // Case-insensitive exact matches (values come from the same picker dataset).
+  const rx = (v: string) => new RegExp(`^${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+
+  const attempts: { filter: Record<string, unknown>; tier: ZoneMatchTier }[] = []
+  if (district && city) attempts.push({ filter: { ...base, district: rx(district), city: rx(city) }, tier: ZoneMatchTier.City })
+  if (district)         attempts.push({ filter: { ...base, district: rx(district) },                  tier: ZoneMatchTier.District })
+  if (city)             attempts.push({ filter: { ...base, city: rx(city) },                          tier: ZoneMatchTier.City })
+
+  for (const a of attempts) {
+    const staff = await User.findOne(a.filter)
+      .sort({ currentLoad: 1 })
+      .select('_id locationZoneId')
+      .lean()
+    if (staff) {
+      return {
+        staffId: staff._id as Types.ObjectId,
+        zoneId:  staff.locationZoneId as Types.ObjectId | undefined,
+        tier:    a.tier,
+      }
+    }
+  }
+
+  return null
 }
 
 // ── Staff resolution ──────────────────────────────────────────────────────────

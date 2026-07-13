@@ -6,6 +6,7 @@ import { getEnquiries, getEnquiryStats } from '@/features/enquiries/actions/enqu
 import EnquiryFilters from '@/features/enquiries/components/EnquiryFilters'
 import EnquiryTableContainer from '@/features/enquiries/components/EnquiryTableContainer'
 import EnquiryStatsBar from '@/features/enquiries/components/EnquiryStatsBar'
+import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
@@ -40,6 +41,7 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
     getEnquiryStats(),
   ])
 
+  const filterOptions = await getEnquiryFormOptions()
   const canCreate = session?.user?.role !== UserRole.Staff
 
   return (
@@ -86,7 +88,11 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
       {/* ── Filters ──────────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
         <Suspense>
-          <EnquiryFilters />
+          <EnquiryFilters options={{
+            priorities: filterOptions.priorities,
+            sources:    filterOptions.sources,
+            products:   filterOptions.products,
+          }} />
         </Suspense>
       </div>
 

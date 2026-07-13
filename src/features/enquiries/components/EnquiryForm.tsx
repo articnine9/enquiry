@@ -1,18 +1,24 @@
 'use client'
 
-import { useActionState, useRef, useEffect } from 'react'
+import { useActionState, useRef, useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Save, X } from 'lucide-react'
 import { createEnquiry, updateEnquiry } from '../actions/enquiry.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
+import { Combobox } from '@/components/forms/Combobox'
 import { SubmitButton } from '@/components/forms/SubmitButton'
+import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
 import { cn } from '@/lib/utils'
-import {
-  EnquirySource, EnquiryPriority, EnquiryCategory, EnquiryProduct,
-  ENQUIRY_SOURCE_LABELS, ENQUIRY_PRIORITY_LABELS, ENQUIRY_PRODUCT_LABELS,
-} from '@/types/enums'
+import type { MasterOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
+
+export interface EnquiryFormOptions {
+  sources:    MasterOption[]
+  categories: MasterOption[]
+  products:   MasterOption[]
+  priorities: MasterOption[]
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +31,7 @@ function buildAction(mode: 'create' | 'edit', id?: string) {
 
 interface EnquiryFormProps {
   mode:       'create' | 'edit'
+  options:    EnquiryFormOptions     // dropdown options from MasterData
   enquiry?:   EnquiryDocument        // only for edit mode
   onCancel?:  () => void
   onSuccess?: (enquiry: EnquiryDocument) => void
@@ -34,6 +41,7 @@ interface EnquiryFormProps {
 
 export default function EnquiryForm({
   mode,
+  options,
   enquiry,
   onCancel,
   onSuccess,
@@ -58,14 +66,28 @@ export default function EnquiryForm({
     }
   }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Select options ─────────────────────────────────────────────────────────
+  // ── Select options (from MasterData) ─────────────────────────────────────────
 
-  const sourceOptions   = Object.values(EnquirySource).map((v) => ({ value: v, label: ENQUIRY_SOURCE_LABELS[v] }))
-  const priorityOptions = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
-  const productOptions  = Object.values(EnquiryProduct).map((v) => ({ value: v, label: ENQUIRY_PRODUCT_LABELS[v] }))
-  const categoryOptions = Object.values(EnquiryCategory).map((v) => ({
-    value: v, label: v.charAt(0).toUpperCase() + v.slice(1),
-  }))
+  const { sources: sourceOptions, priorities: priorityOptions,
+          products: productOptions, categories: categoryOptions } = options
+
+  // Default selection: keep the existing value on edit, else first available option
+  const defaultOf = (opts: MasterOption[], current?: string) =>
+    current ?? opts[0]?.value ?? ''
+
+  // ── District → City dependent dropdowns (South India dataset) ────────────────
+
+  const districtOptions = useMemo(() => getDistrictOptions(), [])
+  const [district, setDistrict] = useState(enquiry?.district ?? '')
+  const [city,     setCity]     = useState(enquiry?.city ?? '')
+  const cityOptions = useMemo(() => getCityOptions(district), [district])
+
+  function handleDistrictChange(next: string) {
+    setDistrict(next)
+    // Clear the city whenever it no longer belongs to the selected district
+    const stillValid = getCityOptions(next).some((c) => c.value === city)
+    if (!stillValid) setCity('')
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -126,23 +148,33 @@ export default function EnquiryForm({
           </FormField>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <FormField id="city" label="City" required error={fe.city}>
-              <input
-                id="city" name="city" type="text"
-                defaultValue={enquiry?.city}
-                placeholder="Kuala Lumpur"
+            <FormField id="district" label="District" required error={fe.district}>
+              <Combobox
+                id="district" name="district"
+                options={districtOptions}
+                value={district}
+                onChange={handleDistrictChange}
+                placeholder="Select district"
+                searchPlaceholder="Search district…"
+                emptyText="No district found"
                 disabled={isPending}
-                className={inputClass(!!fe.city)}
+                hasError={!!fe.district}
               />
             </FormField>
 
-            <FormField id="district" label="District" required error={fe.district}>
-              <input
-                id="district" name="district" type="text"
-                defaultValue={enquiry?.district}
-                placeholder="Cheras"
-                disabled={isPending}
-                className={inputClass(!!fe.district)}
+            <FormField id="city" label="City" required error={fe.city}
+              hint={!district ? 'Select a district first' : undefined}>
+              <Combobox
+                id="city" name="city"
+                options={cityOptions}
+                value={city}
+                onChange={setCity}
+                placeholder="Select city"
+                searchPlaceholder="Search city…"
+                emptyText="No city found"
+                disabled={isPending || !district}
+                disabledHint={!district ? 'Select a district first' : undefined}
+                hasError={!!fe.city}
               />
             </FormField>
 
@@ -151,7 +183,7 @@ export default function EnquiryForm({
               <input
                 id="pincode" name="pincode" type="text"
                 defaultValue={enquiry?.pincode}
-                placeholder="55100"
+                placeholder="600001"
                 maxLength={10}
                 disabled={isPending}
                 className={inputClass(!!fe.pincode)}
@@ -180,7 +212,7 @@ export default function EnquiryForm({
           <FormField id="enquirySource" label="Enquiry Source" required error={fe.enquirySource}>
             <select
               id="enquirySource" name="enquirySource"
-              defaultValue={enquiry?.enquirySource ?? EnquirySource.Web}
+              defaultValue={defaultOf(sourceOptions, enquiry?.enquirySource)}
               disabled={isPending}
               className={selectClass(!!fe.enquirySource)}
             >
@@ -193,7 +225,7 @@ export default function EnquiryForm({
           <FormField id="product" label="Product / Service" required error={fe.product}>
             <select
               id="product" name="product"
-              defaultValue={enquiry?.product ?? EnquiryProduct.Other}
+              defaultValue={defaultOf(productOptions, enquiry?.product)}
               disabled={isPending}
               className={selectClass(!!fe.product)}
             >
@@ -206,7 +238,7 @@ export default function EnquiryForm({
           <FormField id="category" label="Category" required error={fe.category}>
             <select
               id="category" name="category"
-              defaultValue={enquiry?.category ?? EnquiryCategory.General}
+              defaultValue={defaultOf(categoryOptions, enquiry?.category)}
               disabled={isPending}
               className={selectClass(!!fe.category)}
             >
@@ -219,7 +251,7 @@ export default function EnquiryForm({
           <FormField id="priority" label="Priority" required error={fe.priority}>
             <select
               id="priority" name="priority"
-              defaultValue={enquiry?.priority ?? EnquiryPriority.Medium}
+              defaultValue={defaultOf(priorityOptions, enquiry?.priority)}
               disabled={isPending}
               className={selectClass(!!fe.priority)}
             >

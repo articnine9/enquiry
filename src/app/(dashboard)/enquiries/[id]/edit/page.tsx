@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react'
 import { auth } from '@/lib/auth/auth'
 import { getEnquiryById } from '@/features/enquiries/actions/enquiry.actions'
 import EnquiryForm from '@/features/enquiries/components/EnquiryForm'
+import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
 import { UserRole, EnquiryStatus } from '@/types/enums'
 import type { Metadata } from 'next'
 
@@ -29,6 +30,7 @@ export default async function EditEnquiryPage({ params }: PageProps) {
   if (!result.ok) notFound()
 
   const enquiry = result.data
+  const options = await getEnquiryFormOptions()
 
   // Cannot edit closed/cancelled enquiries
   if (
@@ -66,6 +68,7 @@ export default async function EditEnquiryPage({ params }: PageProps) {
         <div className="p-6">
           <EnquiryForm
             mode="edit"
+            options={options}
             enquiry={enquiry as never}
             onCancel={undefined}
           />

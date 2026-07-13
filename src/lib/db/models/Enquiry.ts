@@ -24,10 +24,11 @@ export interface IEnquiry {
   location:      string          // area / locality free-text
 
   // Enquiry meta
-  enquirySource: EnquirySource
-  category:      EnquiryCategory
-  product:       EnquiryProduct
-  priority:      EnquiryPriority
+  enquirySource: string
+  category:      string
+  product:       string
+  priority:      string
+  priorityWeight: number
   status:        EnquiryStatus
 
   // Detail
@@ -170,40 +171,35 @@ const EnquirySchema = new Schema<EnquiryDocument>(
     },
 
     // ── Enquiry meta ──────────────────────────────────────────────────────────
+    // Source / category / product / priority are validated against the MasterData
+    // collection at the action layer, so the schema keeps them as plain strings.
     enquirySource: {
       type:     String,
       required: [true, 'Enquiry source is required'],
-      enum: {
-        values:  Object.values(EnquirySource),
-        message: 'Invalid enquiry source: {VALUE}',
-      },
-      default: EnquirySource.Web,
+      trim:     true,
+      default:  EnquirySource.Web,
     },
     category: {
       type:     String,
       required: [true, 'Category is required'],
-      enum: {
-        values:  Object.values(EnquiryCategory),
-        message: 'Invalid category: {VALUE}',
-      },
-      default: EnquiryCategory.General,
+      trim:     true,
+      default:  EnquiryCategory.General,
     },
     product: {
       type:     String,
       required: [true, 'Product is required'],
-      enum: {
-        values:  Object.values(EnquiryProduct),
-        message: 'Invalid product: {VALUE}',
-      },
-      default: EnquiryProduct.Other,
+      trim:     true,
+      default:  EnquiryProduct.Other,
     },
     priority: {
-      type: String,
-      enum: {
-        values:  Object.values(EnquiryPriority),
-        message: 'Invalid priority: {VALUE}',
-      },
+      type:    String,
+      trim:    true,
       default: EnquiryPriority.Medium,
+    },
+    // Denormalised priority rank (from MasterData.weight) for correct sorting.
+    priorityWeight: {
+      type:    Number,
+      default: 2,
     },
     status: {
       type: String,

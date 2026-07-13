@@ -10,8 +10,20 @@ import {
   EnquiryStatus, EnquiryPriority, EnquirySource, EnquiryProduct,
   ENQUIRY_STATUS_LABELS, ENQUIRY_PRIORITY_LABELS, ENQUIRY_SOURCE_LABELS, ENQUIRY_PRODUCT_LABELS,
 } from '@/types/enums'
+import type { MasterOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryFilterInput } from '../validations/enquiry.schema'
 import { useEffect, useState } from 'react'
+
+// Enum-derived fallbacks — used when master-data options aren't supplied.
+const FALLBACK_PRIORITY = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
+const FALLBACK_SOURCE   = Object.values(EnquirySource).map((v) => ({ value: v, label: ENQUIRY_SOURCE_LABELS[v] }))
+const FALLBACK_PRODUCT  = Object.values(EnquiryProduct).map((v) => ({ value: v, label: ENQUIRY_PRODUCT_LABELS[v] }))
+
+export interface EnquiryFilterOptions {
+  priorities?: MasterOption[]
+  sources?:    MasterOption[]
+  products?:   MasterOption[]
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,8 +62,11 @@ function useFilterSync() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function EnquiryFilters() {
+export default function EnquiryFilters({ options }: { options?: EnquiryFilterOptions } = {}) {
   const { filters, handleFilter, handleReset, searchParams } = useFilterSync()
+  const priorityOpts = options?.priorities ?? FALLBACK_PRIORITY
+  const sourceOpts   = options?.sources    ?? FALLBACK_SOURCE
+  const productOpts  = options?.products   ?? FALLBACK_PRODUCT
   const [searchInput, setSearchInput] = useState(filters.search ?? '')
   const debouncedSearch = useDebounce(searchInput, 400)
 
@@ -120,30 +135,24 @@ export default function EnquiryFilters() {
           id="priority"
           placeholder="All Priorities"
           value={filters.priority ?? ''}
-          onChange={(v) => handleFilter('priority', v as EnquiryPriority)}
-          options={Object.values(EnquiryPriority).map((v) => ({
-            value: v, label: ENQUIRY_PRIORITY_LABELS[v],
-          }))}
+          onChange={(v) => handleFilter('priority', v)}
+          options={priorityOpts}
         />
 
         <FilterSelect
           id="enquirySource"
           placeholder="All Sources"
           value={filters.enquirySource ?? ''}
-          onChange={(v) => handleFilter('enquirySource', v as EnquirySource)}
-          options={Object.values(EnquirySource).map((v) => ({
-            value: v, label: ENQUIRY_SOURCE_LABELS[v],
-          }))}
+          onChange={(v) => handleFilter('enquirySource', v)}
+          options={sourceOpts}
         />
 
         <FilterSelect
           id="product"
           placeholder="All Products"
           value={filters.product ?? ''}
-          onChange={(v) => handleFilter('product', v as EnquiryProduct)}
-          options={Object.values(EnquiryProduct).map((v) => ({
-            value: v, label: ENQUIRY_PRODUCT_LABELS[v],
-          }))}
+          onChange={(v) => handleFilter('product', v)}
+          options={productOpts}
         />
 
         {/* City free-text filter */}

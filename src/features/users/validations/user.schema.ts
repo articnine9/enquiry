@@ -9,6 +9,8 @@ export const CreateUserSchema = z.object({
   status:         z.nativeEnum(UserStatus).default(UserStatus.Active),
   phone:          z.string().max(20).optional(),
   locationZoneId: z.string().optional(),
+  district:       z.string().max(100).trim().optional(),
+  city:           z.string().max(100).trim().optional(),
 })
 
 export const UpdateUserSchema = z.object({
@@ -18,6 +20,8 @@ export const UpdateUserSchema = z.object({
   status:         z.nativeEnum(UserStatus).optional(),
   phone:          z.string().max(20).optional(),
   locationZoneId: z.string().optional().nullable(),
+  district:       z.string().max(100).trim().optional().nullable(),
+  city:           z.string().max(100).trim().optional().nullable(),
 })
 
 export const ChangePasswordSchema = z.object({

@@ -12,7 +12,7 @@ import Assignment, { type AssignmentDocument } from '@/lib/db/models/Assignment'
 import Enquiry from '@/lib/db/models/Enquiry'
 import User from '@/lib/db/models/User'
 import ActivityLog from '@/lib/db/models/ActivityLog'
-import { resolveZone, resolveStaff } from './zone-matcher.service'
+import { resolveZone, resolveStaff, resolveStaffByArea } from './zone-matcher.service'
 import type { LocationZoneDocument } from '@/lib/db/models/LocationZone'
 import {
   AssignmentType,
@@ -204,14 +204,31 @@ export async function autoAssign(
     const enquiryId = toId(params.enquiryId)
     const actorId   = toId(params.actorId)
 
-    // Resolve zone
+    // 1 — Direct match on a staff member's district/city coverage (primary).
+    const areaStaff = await resolveStaffByArea({
+      district: params.district,
+      city:     params.city,
+    })
+    if (areaStaff) {
+      const assignment = await _createAssignmentRecord({
+        enquiryId,
+        staffId:   areaStaff.staffId,
+        actorId,
+        zoneId:    areaStaff.zoneId ?? null,
+        type:      AssignmentType.Auto,
+        matchTier: areaStaff.tier,
+        reason:    `Auto-assigned via staff ${areaStaff.tier} coverage`,
+      })
+      return { ok: true, data: toPlain(assignment) }
+    }
+
+    // 2 — Fall back to zone-based resolution, then any available staff.
     const zoneResolution = await resolveZone({
       pincode:  params.pincode,
       district: params.district,
       city:     params.city,
     })
 
-    // Resolve staff
     const staffResolution = await resolveStaff({
       zone: zoneResolution.zone as LocationZoneDocument | null,
     })

@@ -2,9 +2,7 @@ import { z } from 'zod'
 import {
   EnquiryStatus,
   EnquiryPriority,
-  EnquirySource,
   EnquiryCategory,
-  EnquiryProduct,
 } from '@/types/enums'
 
 // ─── Re-usable field definitions ─────────────────────────────────────────────
@@ -62,19 +60,26 @@ export const CreateEnquirySchema = z.object({
     .min(2,   'Location must be at least 2 characters')
     .max(200, 'Location cannot exceed 200 characters'),
 
-  // Enquiry meta
-  enquirySource: z.nativeEnum(EnquirySource, {
-    errorMap: () => ({ message: 'Select a valid enquiry source' }),
-  }),
-  category: z.nativeEnum(EnquiryCategory, {
-    errorMap: () => ({ message: 'Select a valid category' }),
-  }).default(EnquiryCategory.General),
-  product: z.nativeEnum(EnquiryProduct, {
-    errorMap: () => ({ message: 'Select a valid product' }),
-  }),
-  priority: z.nativeEnum(EnquiryPriority, {
-    errorMap: () => ({ message: 'Select a valid priority' }),
-  }).default(EnquiryPriority.Medium),
+  // Enquiry meta — validated as free strings here; the action verifies each
+  // value exists and is active in the MasterData collection.
+  enquirySource: z
+    .string({ required_error: 'Select an enquiry source' })
+    .trim()
+    .min(1, 'Select an enquiry source'),
+  category: z
+    .string()
+    .trim()
+    .min(1, 'Select a category')
+    .default(EnquiryCategory.General),
+  product: z
+    .string({ required_error: 'Select a product' })
+    .trim()
+    .min(1, 'Select a product'),
+  priority: z
+    .string()
+    .trim()
+    .min(1, 'Select a priority')
+    .default(EnquiryPriority.Medium),
 
   // Detail
   subject: z
@@ -131,10 +136,10 @@ export type UpdateStatusInput = z.infer<typeof UpdateStatusSchema>
 export const EnquiryFilterSchema = z.object({
   search:        z.string().trim().optional(),
   status:        z.nativeEnum(EnquiryStatus).optional(),
-  priority:      z.nativeEnum(EnquiryPriority).optional(),
-  enquirySource: z.nativeEnum(EnquirySource).optional(),
-  product:       z.nativeEnum(EnquiryProduct).optional(),
-  category:      z.nativeEnum(EnquiryCategory).optional(),
+  priority:      z.string().trim().optional(),
+  enquirySource: z.string().trim().optional(),
+  product:       z.string().trim().optional(),
+  category:      z.string().trim().optional(),
   assignedTo:    z.string().optional(),
   city:          z.string().trim().optional(),
   district:      z.string().trim().optional(),

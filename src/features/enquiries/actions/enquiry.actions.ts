@@ -8,6 +8,8 @@ import Enquiry, { type EnquiryDocument } from '@/lib/db/models/Enquiry'
 import { ActivityLog, Assignment, User } from '@/lib/db/models'
 import { requireSession, requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { autoAssign } from '@/features/assignments/services/assignment.service'
+import { resolveMasterValue } from '@/features/settings/services/masterData.service'
+import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
 import {
   CreateEnquirySchema,
@@ -30,6 +32,40 @@ import type { ActionResult, PaginatedResult } from '@/types/api'
 function toPlain<T>(doc: T): T {
   // Convert Mongoose doc → plain JS object safe for RSC serialisation
   return JSON.parse(JSON.stringify(doc))
+}
+
+// Verify each supplied dropdown value exists & is active in MasterData, and
+// derive the priority sort weight. Only fields present in `data` are checked
+// (so partial updates skip untouched fields).
+const MASTER_FIELDS: { key: 'enquirySource' | 'category' | 'product' | 'priority'; type: MasterDataType; label: string }[] = [
+  { key: 'enquirySource', type: 'enquiry_source',   label: 'enquiry source' },
+  { key: 'category',      type: 'enquiry_category', label: 'category' },
+  { key: 'product',       type: 'enquiry_product',  label: 'product' },
+  { key: 'priority',      type: 'enquiry_priority', label: 'priority' },
+]
+
+async function validateMasterFields(
+  data: Partial<Record<'enquirySource' | 'category' | 'product' | 'priority', string>>
+): Promise<
+  | { ok: true; priorityWeight?: number }
+  | { ok: false; fieldErrors: Record<string, string[]> }
+> {
+  const fieldErrors: Record<string, string[]> = {}
+  let priorityWeight: number | undefined
+
+  for (const f of MASTER_FIELDS) {
+    const code = data[f.key]
+    if (code == null) continue
+    const row = await resolveMasterValue(f.type, code)
+    if (!row || !row.isActive) {
+      fieldErrors[f.key] = [`Select a valid ${f.label}`]
+      continue
+    }
+    if (f.key === 'priority') priorityWeight = row.weight ?? 2
+  }
+
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors }
+  return { ok: true, priorityWeight }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,8 +98,14 @@ export async function createEnquiry(
 
     await dbConnect()
 
+    const master = await validateMasterFields(parsed.data)
+    if (!master.ok) {
+      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors }
+    }
+
     const enquiry = await Enquiry.create({
       ...parsed.data,
+      priorityWeight: master.priorityWeight ?? 2,
       createdBy: session.user.id,
     })
 
@@ -134,9 +176,18 @@ export async function updateEnquiry(
       return { ok: false, error: 'You can only update enquiries assigned to you' }
     }
 
+    const master = await validateMasterFields(parsed.data)
+    if (!master.ok) {
+      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors }
+    }
+
+    const update: Record<string, unknown> = { ...parsed.data }
+    // Keep the denormalised sort weight in sync when priority changes.
+    if (parsed.data.priority != null) update.priorityWeight = master.priorityWeight ?? 2
+
     const enquiry = await Enquiry.findByIdAndUpdate(
       id,
-      { $set: parsed.data },
+      { $set: update },
       { new: true, runValidators: true }
     ).lean()
 
@@ -344,9 +395,11 @@ export async function getEnquiries(
     }
 
     const sortDir = sortOrder === 'asc' ? 1 : -1
+    // Priority sorts by its denormalised severity rank, not the raw code string.
+    const sortField = sortBy === 'priority' ? 'priorityWeight' : sortBy
     const sort: Record<string, 1 | -1> = search
-      ? { score: { $meta: 'textScore' } as unknown as -1, [sortBy]: sortDir }
-      : { [sortBy]: sortDir }
+      ? { score: { $meta: 'textScore' } as unknown as -1, [sortField]: sortDir }
+      : { [sortField]: sortDir }
 
     const [data, total] = await Promise.all([
       Enquiry.find(filter)

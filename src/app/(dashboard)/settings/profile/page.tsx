@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { Loader2, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { updateUserAction } from '@/features/users/actions/user.actions'
+import { SettingsHeader } from '@/features/settings/components/SettingsHeader'
 import { cn } from '@/lib/utils'
 
 const INPUT = cn(
@@ -47,18 +47,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-lg mx-auto space-y-6">
-      <Link
-        href="/settings"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to settings
-      </Link>
+    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-2xl mx-auto space-y-6">
+      <SettingsHeader icon={User} title="My Profile" subtitle="Update your personal details" />
 
-      <h1 className="text-xl font-bold text-slate-900 dark:text-white">My Profile</h1>
-
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-sm">
         {error && (
           <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-400">
             {error}

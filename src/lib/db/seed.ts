@@ -5,8 +5,47 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { dbConnect, dbDisconnect } from './connection'
-import { User, Role, LocationZone } from './models'
-import { UserRole, UserStatus } from '@/types/enums'
+import { User, Role, LocationZone, MasterData } from './models'
+import {
+  UserRole, UserStatus,
+  EnquirySource, EnquiryCategory, EnquiryProduct, EnquiryPriority,
+  ENQUIRY_SOURCE_LABELS, ENQUIRY_PRODUCT_LABELS, ENQUIRY_PRIORITY_LABELS,
+} from '@/types/enums'
+import type { MasterDataType } from './models/MasterData'
+
+// ── Master-data defaults (mirror the original enums, marked isSystem) ──────────
+
+function humanize(code: string): string {
+  return code.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const PRIORITY_META: Record<string, { color: string; weight: number }> = {
+  [EnquiryPriority.Low]:    { color: 'slate', weight: 1 },
+  [EnquiryPriority.Medium]: { color: 'blue',  weight: 2 },
+  [EnquiryPriority.High]:   { color: 'amber', weight: 3 },
+  [EnquiryPriority.Urgent]: { color: 'red',   weight: 4 },
+}
+
+interface SeedMaster {
+  type: MasterDataType; code: string; label: string
+  sortOrder: number; color?: string; weight?: number
+}
+
+const SEED_MASTER_DATA: SeedMaster[] = [
+  ...Object.values(EnquirySource).map((v, i) => ({
+    type: 'enquiry_source' as const, code: v, label: ENQUIRY_SOURCE_LABELS[v], sortOrder: i,
+  })),
+  ...Object.values(EnquiryCategory).map((v, i) => ({
+    type: 'enquiry_category' as const, code: v, label: humanize(v), sortOrder: i,
+  })),
+  ...Object.values(EnquiryProduct).map((v, i) => ({
+    type: 'enquiry_product' as const, code: v, label: ENQUIRY_PRODUCT_LABELS[v], sortOrder: i,
+  })),
+  ...Object.values(EnquiryPriority).map((v, i) => ({
+    type: 'enquiry_priority' as const, code: v, label: ENQUIRY_PRIORITY_LABELS[v],
+    sortOrder: i, color: PRIORITY_META[v].color, weight: PRIORITY_META[v].weight,
+  })),
+]
 
 const SEED_ROLES = [
   {
@@ -68,6 +107,24 @@ async function seed() {
     { upsert: true, new: true }
   )
   console.log('✅ Location zone seeded')
+
+  // Master data (enquiry dropdown options) — upsert without clobbering admin edits
+  for (const m of SEED_MASTER_DATA) {
+    await MasterData.findOneAndUpdate(
+      { type: m.type, code: m.code },
+      {
+        $set: { isSystem: true },
+        $setOnInsert: {
+          type: m.type, code: m.code, label: m.label,
+          sortOrder: m.sortOrder, isActive: true,
+          ...(m.color  !== undefined ? { color:  m.color }  : {}),
+          ...(m.weight !== undefined ? { weight: m.weight } : {}),
+        },
+      },
+      { upsert: true, new: true }
+    )
+  }
+  console.log('✅ Master data seeded')
 
   // Super admin user
   const hash = await bcrypt.hash('Admin@123!', 12)

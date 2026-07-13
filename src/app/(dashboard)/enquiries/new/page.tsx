@@ -2,6 +2,7 @@
 import { ChevronLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/session'
 import EnquiryForm from '@/features/enquiries/components/EnquiryForm'
+import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
@@ -9,6 +10,8 @@ export const metadata: Metadata = { title: 'New Enquiry — EnquiryPro' }
 
 export default async function NewEnquiryPage() {
   await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+
+  const options = await getEnquiryFormOptions()
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -34,7 +37,7 @@ export default async function NewEnquiryPage() {
           </p>
         </div>
         <div className="p-6">
-          <EnquiryForm mode="create" />
+          <EnquiryForm mode="create" options={options} />
         </div>
       </div>
     </div>
