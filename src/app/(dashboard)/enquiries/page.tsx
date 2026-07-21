@@ -32,6 +32,7 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
       priority:      sp('priority') as never,
       enquirySource: sp('enquirySource') as never,
       product:       sp('product') as never,
+      slaStatus:     sp('slaStatus') as never,
       city:          sp('city'),
       page:          sp('page') ? Number(sp('page')) : 1,
       pageSize:      sp('pageSize') ? Number(sp('pageSize')) : 20,
@@ -70,17 +71,18 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
 
       {/* ── Stats bar ────────────────────────────────────────────────────────── */}
       {statsResult.ok && (() => {
-        const raw      = statsResult.data as { byStatus?: { _id: string; count: number }[]; totals?: { total?: number; unassigned?: number; resolved?: number }[] }
+        const raw      = statsResult.data as { byStatus?: { _id: string; count: number }[]; totals?: { total?: number; unassigned?: number; resolved?: number; slaBreached?: number }[] }
         const byStatus = raw?.byStatus ?? []
         const totals   = raw?.totals?.[0] ?? {}
-        const openStatuses = ['new', 'assigned', 'in_progress']
+        const openStatuses = ['new', 'assigned', 'in_progress', 'paused']
         const open = byStatus.filter((s) => openStatuses.includes(s._id)).reduce((a, s) => a + s.count, 0)
         return (
           <EnquiryStatsBar stats={{
-            total:    totals?.total    ?? 0,
+            total:       totals?.total       ?? 0,
             open,
-            resolved: totals?.resolved ?? 0,
-            byStatus: byStatus as { _id: import('@/types/enums').EnquiryStatus; count: number }[],
+            resolved:    totals?.resolved    ?? 0,
+            slaBreached: totals?.slaBreached ?? 0,
+            byStatus:    byStatus as { _id: import('@/types/enums').EnquiryStatus; count: number }[],
           }} />
         )
       })()}

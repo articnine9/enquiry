@@ -55,6 +55,20 @@ export default function EnquiryForm({
   const isEdit = mode === 'edit'
   const fe     = (!state?.ok && state?.fieldErrors) ? state.fieldErrors : {}
 
+  // React resets uncontrolled form fields after ANY action completes — success
+  // or failure. On failure we re-key the form so it remounts with the
+  // submitted values as its new defaults, restoring what the user typed.
+  // (State-sync-during-render pattern — avoids an extra render's worth of flash.)
+  const [prevState, setPrevState] = useState(state)
+  const [formKey,   setFormKey]   = useState(0)
+  if (state !== prevState) {
+    setPrevState(state)
+    if (state && !state.ok) setFormKey((k) => k + 1)
+  }
+  const submitted = (state && !state.ok ? state.values : undefined) as Record<string, unknown> | undefined
+  const submittedStr = (key: string): string | undefined =>
+    typeof submitted?.[key] === 'string' ? (submitted[key] as string) : undefined
+
   useEffect(() => {
     if (!state) return
     if (state.ok) {
@@ -71,9 +85,10 @@ export default function EnquiryForm({
   const { sources: sourceOptions, priorities: priorityOptions,
           products: productOptions, categories: categoryOptions } = options
 
-  // Default selection: keep the existing value on edit, else first available option
-  const defaultOf = (opts: MasterOption[], current?: string) =>
-    current ?? opts[0]?.value ?? ''
+  // Default selection: prefer a just-submitted (failed) value, then the existing
+  // value on edit, else the first available option.
+  const defaultOf = (opts: MasterOption[], key: string, current?: string) =>
+    submittedStr(key) ?? current ?? opts[0]?.value ?? ''
 
   // ── District → City dependent dropdowns (South India dataset) ────────────────
 
@@ -92,7 +107,7 @@ export default function EnquiryForm({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <form ref={formRef} action={formAction} noValidate className="space-y-8">
+    <form key={formKey} ref={formRef} action={formAction} noValidate className="space-y-8">
 
       {/* ── Section: Customer Details ──────────────────────────────────────── */}
       <Section title="Customer Details" subtitle="Contact information for the enquiry">
@@ -101,7 +116,7 @@ export default function EnquiryForm({
           <FormField id="customerName" label="Full Name" required error={fe.customerName}>
             <input
               id="customerName" name="customerName" type="text"
-              defaultValue={enquiry?.customerName}
+              defaultValue={submittedStr('customerName') ?? enquiry?.customerName}
               placeholder="e.g. Ahmad bin Razali"
               disabled={isPending}
               aria-describedby={fe.customerName ? 'customerName-error' : undefined}
@@ -112,7 +127,7 @@ export default function EnquiryForm({
           <FormField id="phone" label="Phone Number" required error={fe.phone}>
             <input
               id="phone" name="phone" type="tel"
-              defaultValue={enquiry?.phone}
+              defaultValue={submittedStr('phone') ?? enquiry?.phone}
               placeholder="+60 12-345 6789"
               disabled={isPending}
               className={inputClass(!!fe.phone)}
@@ -122,7 +137,7 @@ export default function EnquiryForm({
           <FormField id="email" label="Email Address" error={fe.email}>
             <input
               id="email" name="email" type="email"
-              defaultValue={enquiry?.email}
+              defaultValue={submittedStr('email') ?? enquiry?.email}
               placeholder="customer@email.com"
               disabled={isPending}
               className={inputClass(!!fe.email)}
@@ -139,7 +154,7 @@ export default function EnquiryForm({
           <FormField id="address" label="Street Address" required error={fe.address}>
             <textarea
               id="address" name="address"
-              defaultValue={enquiry?.address}
+              defaultValue={submittedStr('address') ?? enquiry?.address}
               rows={2}
               placeholder="No. 12, Jalan ABC, Taman XYZ"
               disabled={isPending}
@@ -182,7 +197,7 @@ export default function EnquiryForm({
               hint="5-digit postcode">
               <input
                 id="pincode" name="pincode" type="text"
-                defaultValue={enquiry?.pincode}
+                defaultValue={submittedStr('pincode') ?? enquiry?.pincode}
                 placeholder="600001"
                 maxLength={10}
                 disabled={isPending}
@@ -195,7 +210,7 @@ export default function EnquiryForm({
             hint="Neighbourhood or landmark for auto-assignment">
             <input
               id="location" name="location" type="text"
-              defaultValue={enquiry?.location}
+              defaultValue={submittedStr('location') ?? enquiry?.location}
               placeholder="Near Pavilion KL, Bukit Bintang"
               disabled={isPending}
               className={inputClass(!!fe.location)}
@@ -212,7 +227,7 @@ export default function EnquiryForm({
           <FormField id="enquirySource" label="Enquiry Source" required error={fe.enquirySource}>
             <select
               id="enquirySource" name="enquirySource"
-              defaultValue={defaultOf(sourceOptions, enquiry?.enquirySource)}
+              defaultValue={defaultOf(sourceOptions, 'enquirySource', enquiry?.enquirySource)}
               disabled={isPending}
               className={selectClass(!!fe.enquirySource)}
             >
@@ -225,7 +240,7 @@ export default function EnquiryForm({
           <FormField id="product" label="Product / Service" required error={fe.product}>
             <select
               id="product" name="product"
-              defaultValue={defaultOf(productOptions, enquiry?.product)}
+              defaultValue={defaultOf(productOptions, 'product', enquiry?.product)}
               disabled={isPending}
               className={selectClass(!!fe.product)}
             >
@@ -238,7 +253,7 @@ export default function EnquiryForm({
           <FormField id="category" label="Category" required error={fe.category}>
             <select
               id="category" name="category"
-              defaultValue={defaultOf(categoryOptions, enquiry?.category)}
+              defaultValue={defaultOf(categoryOptions, 'category', enquiry?.category)}
               disabled={isPending}
               className={selectClass(!!fe.category)}
             >
@@ -251,7 +266,7 @@ export default function EnquiryForm({
           <FormField id="priority" label="Priority" required error={fe.priority}>
             <select
               id="priority" name="priority"
-              defaultValue={defaultOf(priorityOptions, enquiry?.priority)}
+              defaultValue={defaultOf(priorityOptions, 'priority', enquiry?.priority)}
               disabled={isPending}
               className={selectClass(!!fe.priority)}
             >
@@ -267,7 +282,7 @@ export default function EnquiryForm({
           <FormField id="subject" label="Subject" required error={fe.subject}>
             <input
               id="subject" name="subject" type="text"
-              defaultValue={enquiry?.subject}
+              defaultValue={submittedStr('subject') ?? enquiry?.subject}
               placeholder="Brief description of the enquiry"
               disabled={isPending}
               className={inputClass(!!fe.subject)}
@@ -277,7 +292,7 @@ export default function EnquiryForm({
           <FormField id="description" label="Description" error={fe.description}>
             <textarea
               id="description" name="description"
-              defaultValue={enquiry?.description}
+              defaultValue={submittedStr('description') ?? enquiry?.description}
               rows={4}
               placeholder="Detailed information about the customer's enquiry…"
               disabled={isPending}
@@ -291,7 +306,7 @@ export default function EnquiryForm({
               hint="Visible to staff and managers only — not shown to the customer">
               <textarea
                 id="internalNotes" name="internalNotes"
-                defaultValue={(enquiry as EnquiryDocument & { internalNotes?: string })?.internalNotes}
+                defaultValue={submittedStr('internalNotes') ?? (enquiry as EnquiryDocument & { internalNotes?: string })?.internalNotes}
                 rows={3}
                 placeholder="Internal notes for the team…"
                 disabled={isPending}
@@ -305,7 +320,7 @@ export default function EnquiryForm({
             hint="Comma-separated, up to 10 tags">
             <input
               id="tags" name="tags" type="text"
-              defaultValue={enquiry?.tags?.join(', ')}
+              defaultValue={Array.isArray(submitted?.tags) ? (submitted.tags as string[]).join(', ') : enquiry?.tags?.join(', ')}
               placeholder="urgent, rooftop, commercial"
               disabled={isPending}
               className={inputClass(!!fe.tags)}

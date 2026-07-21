@@ -2,27 +2,16 @@
 
 import { useActionState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { updateEnquiryStatus } from '../actions/enquiry.actions'
 import { SubmitButton } from '@/components/forms/SubmitButton'
-import { cn } from '@/lib/utils'
+import { SlaBadge } from './SlaBadge'
+import { selectClass } from '@/components/forms/FormField'
 import {
   EnquiryStatus, ENQUIRY_STATUS_LABELS,
   ALLOWED_TRANSITIONS,
 } from '@/types/enums'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<EnquiryStatus, string> = {
-  [EnquiryStatus.New]:        'border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800',
-  [EnquiryStatus.Assigned]:   'border-blue-300   text-blue-700   hover:bg-blue-50   dark:border-blue-600   dark:text-blue-300   dark:hover:bg-blue-900/20',
-  [EnquiryStatus.InProgress]: 'border-amber-300  text-amber-700  hover:bg-amber-50  dark:border-amber-600  dark:text-amber-300  dark:hover:bg-amber-900/20',
-  [EnquiryStatus.FollowUp]:   'border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-600 dark:text-purple-300 dark:hover:bg-purple-900/20',
-  [EnquiryStatus.Resolved]:   'border-green-300  text-green-700  hover:bg-green-50  dark:border-green-600  dark:text-green-300  dark:hover:bg-green-900/20',
-  [EnquiryStatus.Closed]:     'border-slate-300  text-slate-500  hover:bg-slate-50  dark:border-slate-600  dark:text-slate-400  dark:hover:bg-slate-800',
-  [EnquiryStatus.Cancelled]:  'border-red-300    text-red-600    hover:bg-red-50    dark:border-red-600    dark:text-red-400    dark:hover:bg-red-900/20',
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -74,11 +63,19 @@ export default function StatusUpdateModal({
     >
       {/* Header */}
       <div className="flex items-start justify-between p-5 border-b border-slate-100 dark:border-slate-800">
-        <div>
+        <div className="space-y-1.5">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">Update Status</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {enquiry.enquiryNo} · Currently: <span className="font-medium">{ENQUIRY_STATUS_LABELS[enquiry.status]}</span>
           </p>
+          <SlaBadge
+            createdAt={enquiry.createdAt}
+            dueAt={enquiry.slaDueAt}
+            slaMet={enquiry.slaMet}
+            isClosed={enquiry.status === EnquiryStatus.Cancelled}
+            isPaused={enquiry.status === EnquiryStatus.Paused}
+            showCountdown
+          />
         </div>
         <button
           type="button"
@@ -94,38 +91,33 @@ export default function StatusUpdateModal({
         {/* Hidden enquiry id */}
         <input type="hidden" name="id" value={enquiryId} />
 
-        {/* Status buttons */}
+        {/* Status dropdown */}
         <div>
-          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+          <label htmlFor="status" className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
             Select new status
-          </p>
+          </label>
 
           {allowedNext.length === 0 ? (
             <p className="text-sm text-slate-500 italic">
               No valid transitions available from the current status.
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <select
+              id="status"
+              name="status"
+              required
+              disabled={isPending}
+              defaultValue=""
+              className={selectClass()}
+            >
+              <option value="" disabled>Choose a status…</option>
               {allowedNext.map((s) => (
-                <label
-                  key={s}
-                  className={cn(
-                    'relative flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors text-sm font-medium',
-                    STATUS_COLORS[s]
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="status"
-                    value={s}
-                    required
-                    className="sr-only peer"
-                  />
-                  <CheckCircle2 className="w-4 h-4 peer-checked:opacity-100 opacity-0 absolute right-2 top-1/2 -translate-y-1/2" />
+                <option key={s} value={s}>
                   {ENQUIRY_STATUS_LABELS[s]}
-                </label>
+                  {s === EnquiryStatus.Paused ? ' (pauses SLA clock)' : ''}
+                </option>
               ))}
-            </div>
+            </select>
           )}
         </div>
 

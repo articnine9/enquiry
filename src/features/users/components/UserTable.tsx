@@ -63,6 +63,7 @@ export default function UserTable({
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Zone</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Coverage</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Last login</th>
                 <th className="w-24" />
               </tr>
@@ -71,7 +72,7 @@ export default function UserTable({
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
                       </td>
@@ -80,7 +81,7 @@ export default function UserTable({
                 ))
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 text-sm">
+                  <td colSpan={7} className="py-12 text-center text-slate-400 text-sm">
                     No users found
                   </td>
                 </tr>
@@ -129,6 +130,16 @@ export default function UserTable({
                   <td className="px-4 py-3">
                     <span className="text-xs text-slate-600 dark:text-slate-400">
                       {u.zoneName ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
+                    </span>
+                  </td>
+
+                  {/* Coverage (district / city) */}
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
+                      {u.district
+                        ? `${u.district}${u.city ? ` / ${u.city}` : ''}`
+                        : <span className="text-slate-300 dark:text-slate-600">—</span>
+                      }
                     </span>
                   </td>
 

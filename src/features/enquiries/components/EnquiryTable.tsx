@@ -12,6 +12,7 @@ import { useEnquiryStore } from '@/store/enquiry.store'
 import { deleteEnquiry } from '../actions/enquiry.actions'
 import { StatusBadge } from './StatusBadge'
 import { PriorityBadge } from './PriorityBadge'
+import { SlaBadge } from './SlaBadge'
 import { cn, formatDate, getInitials } from '@/lib/utils'
 import { UserRole, EnquiryStatus, ENQUIRY_SOURCE_LABELS } from '@/types/enums'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
@@ -31,6 +32,7 @@ const COLUMNS: Column[] = [
   { key: 'customerName', label: 'Customer',      sortable: true },
   { key: 'status',       label: 'Status',        className: 'w-32' },
   { key: 'priority',     label: 'Priority',      className: 'w-28' },
+  { key: 'sla',          label: 'SLA',           className: 'w-32' },
   { key: 'enquirySource',label: 'Source',        className: 'w-28 hidden lg:table-cell' },
   { key: 'product',      label: 'Product',       className: 'w-32 hidden xl:table-cell' },
   { key: 'city',         label: 'City',          className: 'w-28 hidden md:table-cell' },
@@ -181,6 +183,17 @@ export default function EnquiryTable({
                   {/* Priority */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PriorityBadge priority={enquiry.priority} />
+                  </td>
+
+                  {/* SLA */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <SlaBadge
+                      createdAt={enquiry.createdAt}
+                      dueAt={enquiry.slaDueAt}
+                      slaMet={enquiry.slaMet}
+                      isClosed={enquiry.status === EnquiryStatus.Cancelled}
+                      isPaused={enquiry.status === EnquiryStatus.Paused}
+                    />
                   </td>
 
                   {/* Source */}

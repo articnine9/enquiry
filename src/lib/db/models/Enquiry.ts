@@ -43,6 +43,13 @@ export interface IEnquiry {
   assignedBy?:   Types.ObjectId | 'system'
   assignedAt?:   Date
 
+  // SLA — resolved via SLAPolicy at create/priority-change time, frozen at resolution
+  slaPolicyId?:      Types.ObjectId | null
+  slaDueAt?:         Date | null
+  slaMet?:           boolean | null   // null while open; frozen true/false when resolved
+  slaPausedAt?:      Date | null      // set while status = Paused; clears (and shifts slaDueAt) on resume
+  slaPausedTotalMs?: number           // cumulative paused duration, across all pause/resume cycles
+
   // Timestamps
   resolvedAt?:   Date
   closedAt?:     Date
@@ -101,8 +108,9 @@ async function generateEnquiryNo(): Promise<string> {
 const ALLOWED_TRANSITIONS: Record<EnquiryStatus, EnquiryStatus[]> = {
   [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Cancelled],
   [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
-  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
+  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,    EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
+  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved,  EnquiryStatus.Cancelled],
   [EnquiryStatus.Resolved]:   [EnquiryStatus.Closed,     EnquiryStatus.InProgress],
   [EnquiryStatus.Closed]:     [],
   [EnquiryStatus.Cancelled]:  [],
@@ -243,6 +251,13 @@ const EnquirySchema = new Schema<EnquiryDocument>(
     assignedBy: { type: Schema.Types.Mixed },   // ObjectId | 'system'
     assignedAt: { type: Date },
 
+    // ── SLA ───────────────────────────────────────────────────────────────────
+    slaPolicyId:      { type: Schema.Types.ObjectId, ref: 'SLAPolicy', default: null },
+    slaDueAt:         { type: Date,    default: null },
+    slaMet:           { type: Boolean, default: null },
+    slaPausedAt:      { type: Date,    default: null },
+    slaPausedTotalMs: { type: Number,  default: 0 },
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     resolvedAt: { type: Date },
     closedAt:   { type: Date },
@@ -274,6 +289,8 @@ EnquirySchema.index({ enquirySource: 1 })
 EnquirySchema.index({ createdAt: -1 })
 EnquirySchema.index({ customerName: 1 })
 EnquirySchema.index({ phone: 1 })
+EnquirySchema.index({ status: 1, slaDueAt: 1 })   // breached-open lookups
+EnquirySchema.index({ slaMet: 1 })                // compliance reporting
 // Full-text search across the most user-visible fields
 EnquirySchema.index(
   {
@@ -331,6 +348,14 @@ EnquirySchema.virtual('followUps', {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
+// Snapshot the persisted status whenever a document is hydrated from the DB, so
+// the FSM guard below can compare against the true previous value. `$locals` is
+// scratch space Mongoose provides for exactly this — it's never persisted and
+// never touched by `find`/`update` queries themselves.
+EnquirySchema.post('init', function (doc) {
+  doc.$locals.previousStatus = doc.status
+})
+
 // Auto-generate enquiry number on first save
 EnquirySchema.pre('save', async function (next) {
   if (this.isNew && !this.enquiryNo) {
@@ -339,9 +364,30 @@ EnquirySchema.pre('save', async function (next) {
 
   if (this.isModified('status') && !this.isNew) {
     const now = new Date()
-    if (this.status === EnquiryStatus.Resolved && !this.resolvedAt) this.resolvedAt = now
+    const prevStatus = this.$locals.previousStatus as EnquiryStatus | undefined
+
+    if (this.status === EnquiryStatus.Resolved && !this.resolvedAt) {
+      this.resolvedAt = now
+      // Freeze the SLA verdict at the moment of resolution — permanent from here on,
+      // even if the policy or due date changes later.
+      if (this.slaDueAt) this.slaMet = now.getTime() <= new Date(this.slaDueAt).getTime()
+    }
     if (this.status === EnquiryStatus.Closed   && !this.closedAt)   this.closedAt   = now
     if (this.status === EnquiryStatus.Assigned  && !this.assignedAt) this.assignedAt = now
+
+    // SLA pause/resume — the due date absorbs however long the clock was paused,
+    // so `getSlaStatus` never needs to know about pause history, only the current state.
+    if (this.status === EnquiryStatus.Paused && prevStatus !== EnquiryStatus.Paused) {
+      this.slaPausedAt = now
+    }
+    if (prevStatus === EnquiryStatus.Paused && this.status !== EnquiryStatus.Paused) {
+      if (this.slaPausedAt && this.slaDueAt) {
+        const pausedMs = now.getTime() - new Date(this.slaPausedAt).getTime()
+        this.slaDueAt = new Date(new Date(this.slaDueAt).getTime() + pausedMs)
+        this.slaPausedTotalMs = (this.slaPausedTotalMs ?? 0) + pausedMs
+      }
+      this.slaPausedAt = null
+    }
   }
 
   next()
@@ -351,13 +397,9 @@ EnquirySchema.pre('save', async function (next) {
 EnquirySchema.pre('save', function (next) {
   if (!this.isModified('status') || this.isNew) return next()
 
-  // $__ is mongoose's internal state, not exposed on the public Document type
-  const internals = this as unknown as {
-    $__?: { activePaths?: { paths?: Record<string, string> } }
-  }
-  const prev = internals.$__?.activePaths?.paths?.status
+  const prev = this.$locals.previousStatus as EnquiryStatus | undefined
   if (prev && prev !== this.status) {
-    const allowed = ALLOWED_TRANSITIONS[prev as EnquiryStatus] ?? []
+    const allowed = ALLOWED_TRANSITIONS[prev] ?? []
     if (!allowed.includes(this.status)) {
       return next(new Error(`Invalid status transition: ${prev} → ${this.status}`))
     }

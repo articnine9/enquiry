@@ -1,7 +1,10 @@
 'use client'
 
+import { useMemo } from 'react'
 import { Search, RotateCcw } from 'lucide-react'
 import { UserRole, UserStatus } from '@/types/enums'
+import { Combobox } from '@/components/forms/Combobox'
+import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
 import { cn } from '@/lib/utils'
 import type { UserFilters } from '../actions/user.actions'
 
@@ -42,7 +45,22 @@ export default function UserFilters({
     onChange({ ...filters, ...patch, page: 1 })
   }
 
-  const hasActive = !!(filters.search || filters.role || filters.status || filters.locationZoneId)
+  const districtOptions = useMemo(() => getDistrictOptions(), [])
+  const cityOptions = useMemo(
+    () => (filters.district ? getCityOptions(filters.district) : []),
+    [filters.district]
+  )
+
+  function handleDistrictChange(district: string) {
+    // Clear city if it no longer belongs to the newly selected district
+    const stillValid = district && getCityOptions(district).some((c) => c.value === filters.city)
+    set({ district: district || undefined, city: stillValid ? filters.city : undefined })
+  }
+
+  const hasActive = !!(
+    filters.search || filters.role || filters.status ||
+    filters.locationZoneId || filters.district || filters.city
+  )
 
   return (
     <div className="flex flex-wrap gap-3 items-center">
@@ -78,6 +96,34 @@ export default function UserFilters({
           {zones.map((z) => <option key={z._id} value={z._id}>{z.name}</option>)}
         </select>
       )}
+
+      {/* Coverage: district / city */}
+      <div className="w-44">
+        <Combobox
+          id="staff-filter-district"
+          name="district"
+          options={districtOptions}
+          value={filters.district ?? ''}
+          onChange={handleDistrictChange}
+          placeholder="All districts"
+          searchPlaceholder="Search district…"
+          emptyText="No district found"
+        />
+      </div>
+      <div className="w-40">
+        <Combobox
+          id="staff-filter-city"
+          name="city"
+          options={cityOptions}
+          value={filters.city ?? ''}
+          onChange={(city) => set({ city: city || undefined })}
+          placeholder="All cities"
+          searchPlaceholder="Search city…"
+          emptyText="No city found"
+          disabled={!filters.district}
+          disabledHint="Select a district first"
+        />
+      </div>
 
       {hasActive && (
         <button

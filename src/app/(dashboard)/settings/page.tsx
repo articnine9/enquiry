@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { User, Lock, Database, ChevronRight, ShieldCheck } from 'lucide-react'
+import { User, Lock, Database, Timer, ChevronRight, ShieldCheck } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { getInitials } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -55,6 +55,16 @@ const CARDS: SettingCard[] = [
     iconColor: 'text-emerald-600 dark:text-emerald-400',
     title:     'Master Data',
     desc:      'Manage enquiry dropdown options — source, category, product, priority',
+    group:     'admin',
+    roles:     [UserRole.SuperAdmin],
+  },
+  {
+    href:      '/settings/sla-policies',
+    icon:      Timer,
+    iconBg:    'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+    title:     'SLA Policies',
+    desc:      'Set resolution-time targets per priority and category',
     group:     'admin',
     roles:     [UserRole.SuperAdmin],
   },

@@ -19,7 +19,7 @@ import {
   AssignmentStatus,
   ZoneMatchTier,
 } from '@/types/assignment.types'
-import { ActivityAction, EntityType } from '@/types/enums'
+import { ActivityAction, EntityType, type UserRole } from '@/types/enums'
 import type {
   AutoAssignParams,
   ManualAssignParams,
@@ -57,6 +57,7 @@ async function _createAssignmentRecord(params: {
   enquiryId:             Types.ObjectId
   staffId:               Types.ObjectId
   actorId:               Types.ObjectId
+  actorRole:             UserRole
   zoneId?:               Types.ObjectId | null
   type:                  AssignmentType
   matchTier?:            ZoneMatchTier
@@ -70,7 +71,7 @@ async function _createAssignmentRecord(params: {
 
   try {
     const {
-      enquiryId, staffId, actorId, zoneId,
+      enquiryId, staffId, actorId, actorRole, zoneId,
       type, matchTier, reason, previousAssignmentId,
     } = params
 
@@ -160,12 +161,13 @@ async function _createAssignmentRecord(params: {
     await ActivityLog.create(
       [
         {
-          userId:      actorId,
+          actorId,
+          actorRole,
           action,
           entityType:  EntityType.Enquiry,
           entityId:    enquiryId,
-          description: `${type === AssignmentType.Reassigned ? 'Reassigned' : 'Assigned'} to ${staff.name}`,
           metadata: {
+            description: `${type === AssignmentType.Reassigned ? 'Reassigned' : 'Assigned'} to ${staff.name}`,
             assignmentId:  newAssignment._id,
             staffId,
             staffName:     staff.name,
@@ -214,6 +216,7 @@ export async function autoAssign(
         enquiryId,
         staffId:   areaStaff.staffId,
         actorId,
+        actorRole: params.actorRole,
         zoneId:    areaStaff.zoneId ?? null,
         type:      AssignmentType.Auto,
         matchTier: areaStaff.tier,
@@ -240,6 +243,7 @@ export async function autoAssign(
       enquiryId,
       staffId:    staffResolution.staffId,
       actorId,
+      actorRole:  params.actorRole,
       zoneId:     zoneResolution.zone?._id ?? null,
       type:       AssignmentType.Auto,
       matchTier:  zoneResolution.matchTier,
@@ -279,6 +283,7 @@ export async function manualAssign(
       enquiryId,
       staffId,
       actorId,
+      actorRole: params.actorRole,
       zoneId:    null,
       type:      AssignmentType.Manual,
       matchTier: ZoneMatchTier.Global,
@@ -327,6 +332,7 @@ export async function reassign(
       enquiryId,
       staffId,
       actorId,
+      actorRole:           params.actorRole,
       zoneId:              newStaff?.locationZoneId as Types.ObjectId | null ?? null,
       type:                AssignmentType.Reassigned,
       matchTier:           ZoneMatchTier.Global,
@@ -394,12 +400,13 @@ export async function releaseStaff(
       await ActivityLog.create(
         [
           {
-            userId:      actorId,
+            actorId,
+            actorRole:   params.actorRole,
             action:      ActivityAction.EnquiryReassigned,
             entityType:  EntityType.Enquiry,
             entityId:    enquiryId,
-            description: 'Staff released from enquiry',
             metadata: {
+              description:    'Staff released from enquiry',
               assignmentId:   active._id,
               releasedReason: params.releasedReason,
             },

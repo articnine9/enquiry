@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { UserCheck, X, AlertCircle } from 'lucide-react'
+import { UserCheck, X, AlertCircle, Loader2 } from 'lucide-react'
 import { assignEnquiry } from '../actions/enquiry.actions'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ interface StaffOption {
 interface AssignStaffModalProps {
   enquiry:     EnquiryDocument
   staffList:   StaffOption[]
+  isLoading?:  boolean
   onClose:     () => void
   onAssigned:  (enquiry: EnquiryDocument) => void
 }
@@ -31,6 +32,7 @@ interface AssignStaffModalProps {
 export default function AssignStaffModal({
   enquiry,
   staffList,
+  isLoading = false,
   onClose,
   onAssigned,
 }: AssignStaffModalProps) {
@@ -92,7 +94,12 @@ export default function AssignStaffModal({
             Select staff member
           </p>
 
-          {staffList.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm">
+              <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" />
+              Loading staff…
+            </div>
+          ) : staffList.length === 0 ? (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               No active staff members available.

@@ -3,10 +3,11 @@ import { EnquiryStatus, ENQUIRY_STATUS_LABELS } from '@/types/enums'
 
 interface StatsBarProps {
   stats?: {
-    total?:    number
-    open?:     number
-    resolved?: number
-    byStatus?: { _id: EnquiryStatus; count: number }[]
+    total?:       number
+    open?:        number
+    resolved?:    number
+    slaBreached?: number
+    byStatus?:    { _id: EnquiryStatus; count: number }[]
   }
 }
 
@@ -43,6 +44,12 @@ export default function EnquiryStatsBar({ stats }: StatsBarProps) {
         label="Open"
         value={stats?.open ?? 0}
         className="text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800"
+      />
+      {/* SLA Breached */}
+      <StatCard
+        label="SLA Breached"
+        value={stats?.slaBreached ?? 0}
+        className="text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800"
       />
       {/* Per status */}
       {shown.map((status) => (

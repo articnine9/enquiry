@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, User, Edit2 } from 'lucide-react'
+import { User, Edit2, MapPin } from 'lucide-react'
 import { requireRole } from '@/lib/auth/session'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { UserRole, UserStatus } from '@/types/enums'
 import { getUserAction } from '@/features/users/actions/user.actions'
 import { getEntityAuditLogsAction } from '@/features/audit/actions/audit.actions'
@@ -41,16 +42,17 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
   const canEdit = session.user.role === UserRole.SuperAdmin ||
     (session.user.role === UserRole.Manager && u.role === UserRole.Staff)
 
+  const coverage = [u.district, u.city].filter(Boolean).join(' / ')
+
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-      {/* Back */}
-      <Link
-        href="/staff"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to staff
-      </Link>
+      <PageHeader
+        icon={User}
+        title="Staff Profile"
+        subtitle={`${u.name} · ${ROLE_LABEL[u.role]}`}
+        backHref="/staff"
+        backLabel="Back to staff"
+      />
 
       {/* Profile card */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
@@ -76,7 +78,7 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
           )}
         </div>
 
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-4">
           <div>
             <p className="text-xs font-medium text-slate-400 mb-1">Role</p>
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{ROLE_LABEL[u.role]}</p>
@@ -90,6 +92,12 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
           <div>
             <p className="text-xs font-medium text-slate-400 mb-1">Zone</p>
             <p className="text-sm text-slate-700 dark:text-slate-300">{u.zoneName ?? '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
+              <MapPin className="w-3 h-3" /> Coverage
+            </p>
+            <p className="text-sm text-slate-700 dark:text-slate-300">{coverage || '—'}</p>
           </div>
           <div>
             <p className="text-xs font-medium text-slate-400 mb-1">Last login</p>

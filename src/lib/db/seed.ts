@@ -5,7 +5,7 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { dbConnect, dbDisconnect } from './connection'
-import { User, Role, LocationZone, MasterData } from './models'
+import { User, Role, LocationZone, MasterData, SLAPolicy } from './models'
 import {
   UserRole, UserStatus,
   EnquirySource, EnquiryCategory, EnquiryProduct, EnquiryPriority,
@@ -29,6 +29,14 @@ const PRIORITY_META: Record<string, { color: string; weight: number }> = {
 interface SeedMaster {
   type: MasterDataType; code: string; label: string
   sortOrder: number; color?: string; weight?: number
+}
+
+// Default resolution-time targets per priority, in minutes.
+const SLA_DEFAULTS_MINUTES: Record<string, number> = {
+  [EnquiryPriority.Urgent]: 240,    // 4 hours
+  [EnquiryPriority.High]:   1440,   // 24 hours
+  [EnquiryPriority.Medium]: 4320,   // 3 days
+  [EnquiryPriority.Low]:    10080,  // 7 days
 }
 
 const SEED_MASTER_DATA: SeedMaster[] = [
@@ -125,6 +133,19 @@ async function seed() {
     )
   }
   console.log('✅ Master data seeded')
+
+  // SLA policies — one default (all-categories) row per priority
+  for (const [priority, resolutionMinutes] of Object.entries(SLA_DEFAULTS_MINUTES)) {
+    await SLAPolicy.findOneAndUpdate(
+      { priority, category: null },
+      {
+        $set: { isSystem: true },
+        $setOnInsert: { priority, category: null, resolutionMinutes, isActive: true },
+      },
+      { upsert: true, new: true }
+    )
+  }
+  console.log('✅ SLA policies seeded')
 
   // Super admin user
   const hash = await bcrypt.hash('Admin@123!', 12)

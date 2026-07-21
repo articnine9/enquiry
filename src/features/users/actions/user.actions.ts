@@ -38,6 +38,8 @@ export interface UserFilters {
   role?:          UserRole
   status?:        UserStatus
   locationZoneId?: string
+  district?:      string
+  city?:          string
   page?:          number
   pageSize?:      number
 }
@@ -64,6 +66,8 @@ export async function getUsersAction(
     if (filters.role)           query['role']           = filters.role
     if (filters.status)         query['status']         = filters.status
     if (filters.locationZoneId) query['locationZoneId'] = filters.locationZoneId
+    if (filters.district)       query['district']       = new RegExp(`^${filters.district.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    if (filters.city)           query['city']           = new RegExp(`^${filters.city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
 
     const [docs, total] = await Promise.all([
       User.find(query)

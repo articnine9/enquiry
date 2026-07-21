@@ -19,6 +19,13 @@ const FALLBACK_PRIORITY = Object.values(EnquiryPriority).map((v) => ({ value: v,
 const FALLBACK_SOURCE   = Object.values(EnquirySource).map((v) => ({ value: v, label: ENQUIRY_SOURCE_LABELS[v] }))
 const FALLBACK_PRODUCT  = Object.values(EnquiryProduct).map((v) => ({ value: v, label: ENQUIRY_PRODUCT_LABELS[v] }))
 
+const SLA_FILTER_OPTIONS = [
+  { value: 'breached', label: 'Breached' },
+  { value: 'at_risk',  label: 'At Risk' },
+  { value: 'met',      label: 'Met' },
+  { value: 'missed',   label: 'Missed' },
+]
+
 export interface EnquiryFilterOptions {
   priorities?: MasterOption[]
   sources?:    MasterOption[]
@@ -76,7 +83,7 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
 
   const hasActiveFilters =
     !!(filters.status || filters.priority || filters.enquirySource ||
-       filters.product || filters.city || filters.search)
+       filters.product || filters.city || filters.search || filters.slaStatus)
 
   return (
     <div className="space-y-3">
@@ -153,6 +160,14 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
           value={filters.product ?? ''}
           onChange={(v) => handleFilter('product', v)}
           options={productOpts}
+        />
+
+        <FilterSelect
+          id="slaStatus"
+          placeholder="All SLA"
+          value={filters.slaStatus ?? ''}
+          onChange={(v) => handleFilter('slaStatus', v as EnquiryFilterInput['slaStatus'])}
+          options={SLA_FILTER_OPTIONS}
         />
 
         {/* City free-text filter */}

@@ -72,7 +72,8 @@ export async function manualAssignAction(
 
     const result = await manualAssign({
       ...parsed.data,
-      actorId: session.user.id,
+      actorId:   session.user.id,
+      actorRole: session.user.role,
     })
 
     if (result.ok) {
@@ -114,7 +115,8 @@ export async function reassignAction(
 
     const result = await reassign({
       ...parsed.data,
-      actorId: session.user.id,
+      actorId:   session.user.id,
+      actorRole: session.user.role,
     })
 
     if (result.ok) {
@@ -155,7 +157,8 @@ export async function releaseStaffAction(
 
     const result = await releaseStaff({
       ...parsed.data,
-      actorId: session.user.id,
+      actorId:   session.user.id,
+      actorRole: session.user.role,
     })
 
     if (result.ok) {

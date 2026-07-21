@@ -1,7 +1,15 @@
 // ─── Server Action return types ───────────────────────────────────────────────
 
 export type ActionSuccess<T> = { ok: true;  data: T }
-export type ActionError      = { ok: false; error: string; fieldErrors?: Record<string, string[]> }
+export type ActionError      = {
+  ok: false
+  error: string
+  fieldErrors?: Record<string, string[]>
+  // Raw submitted values, echoed back so a form bound via useActionState can
+  // re-populate itself — React resets uncontrolled fields after any action
+  // completes, success or failure, so without this typed input is lost.
+  values?: Record<string, unknown>
+}
 export type ActionResult<T>  = ActionSuccess<T> | ActionError
 
 // ─── Paginated query result ───────────────────────────────────────────────────

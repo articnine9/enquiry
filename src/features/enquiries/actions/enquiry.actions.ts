@@ -9,6 +9,8 @@ import { ActivityLog, Assignment, User } from '@/lib/db/models'
 import { requireSession, requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { autoAssign } from '@/features/assignments/services/assignment.service'
 import { resolveMasterValue } from '@/features/settings/services/masterData.service'
+import { resolveSlaPolicy } from '@/features/settings/services/slaPolicy.service'
+import { computeSlaDueAt, SLA_AT_RISK_RATIO } from '@/lib/sla'
 import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
 import {
@@ -23,6 +25,7 @@ import {
   EntityType,
   AssignmentType,
   UserRole,
+  UserStatus,
   EnquiryStatus,
 } from '@/types/enums'
 import type { ActionResult, PaginatedResult } from '@/types/api'
@@ -82,9 +85,9 @@ export async function createEnquiry(
     const raw = Object.fromEntries(formData.entries())
     // Tags arrive as comma-separated string from the form
     if (typeof raw.tags === 'string') {
-      raw.tags = raw.tags
-        ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean) as unknown as string
-        : '' as unknown as string
+      raw.tags = (raw.tags
+        ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : []) as unknown as string
     }
 
     const parsed = CreateEnquirySchema.safeParse(raw)
@@ -93,6 +96,7 @@ export async function createEnquiry(
         ok:          false,
         error:       'Please fix the errors below',
         fieldErrors: parsed.error.flatten().fieldErrors,
+        values:      raw,
       }
     }
 
@@ -100,13 +104,18 @@ export async function createEnquiry(
 
     const master = await validateMasterFields(parsed.data)
     if (!master.ok) {
-      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors }
+      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors, values: raw }
     }
+
+    const now    = new Date()
+    const policy = await resolveSlaPolicy(parsed.data.priority, parsed.data.category)
 
     const enquiry = await Enquiry.create({
       ...parsed.data,
       priorityWeight: master.priorityWeight ?? 2,
-      createdBy: session.user.id,
+      slaPolicyId:    policy.policyId,
+      slaDueAt:       computeSlaDueAt(now, policy.resolutionMinutes),
+      createdBy:      session.user.id,
     })
 
     // Attempt auto-assignment — non-blocking
@@ -116,7 +125,10 @@ export async function createEnquiry(
       city:      parsed.data.city,
       district:  parsed.data.district,
       actorId:   session.user.id,
-    }).catch(() => {})
+      actorRole: session.user.role,
+    })
+      .then((r) => { if (!r.ok) console.error(`Auto-assign failed for ${enquiry._id}:`, r.error) })
+      .catch((err) => console.error(`Auto-assign threw for ${enquiry._id}:`, err))
 
     await ActivityLog.create({
       actorId:    session.user.id,
@@ -149,9 +161,9 @@ export async function updateEnquiry(
 
     const raw = Object.fromEntries(formData.entries())
     if (typeof raw.tags === 'string') {
-      raw.tags = raw.tags
-        ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean) as unknown as string
-        : '' as unknown as string
+      raw.tags = (raw.tags
+        ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : []) as unknown as string
     }
 
     const parsed = UpdateEnquirySchema.safeParse(raw)
@@ -160,6 +172,7 @@ export async function updateEnquiry(
         ok:          false,
         error:       'Please fix the errors below',
         fieldErrors: parsed.error.flatten().fieldErrors,
+        values:      raw,
       }
     }
 
@@ -178,12 +191,22 @@ export async function updateEnquiry(
 
     const master = await validateMasterFields(parsed.data)
     if (!master.ok) {
-      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors }
+      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors, values: raw }
     }
 
     const update: Record<string, unknown> = { ...parsed.data }
     // Keep the denormalised sort weight in sync when priority changes.
     if (parsed.data.priority != null) update.priorityWeight = master.priorityWeight ?? 2
+
+    // Re-resolve the SLA target when priority or category changes — anchored to
+    // the ORIGINAL createdAt so the clock never restarts, only the target moves.
+    if (parsed.data.priority != null || parsed.data.category != null) {
+      const priority = parsed.data.priority ?? before.priority
+      const category = parsed.data.category ?? before.category
+      const policy   = await resolveSlaPolicy(priority, category)
+      update.slaPolicyId = policy.policyId
+      update.slaDueAt    = computeSlaDueAt(new Date(before.createdAt), policy.resolutionMinutes)
+    }
 
     const enquiry = await Enquiry.findByIdAndUpdate(
       id,
@@ -357,7 +380,7 @@ export async function getEnquiries(
 
     const {
       search, status, priority, enquirySource, product,
-      category, assignedTo, city, district,
+      category, assignedTo, city, district, slaStatus,
       dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
     } = parsed.data
 
@@ -386,6 +409,32 @@ export async function getEnquiries(
     if (district)      filter.district      = { $regex: district, $options: 'i' }
     if (assignedTo && session.user.role !== UserRole.Staff) {
       filter.assignedTo = assignedTo
+    }
+
+    if (slaStatus) {
+      const now = new Date()
+      if (slaStatus === 'met')    filter.slaMet = true
+      if (slaStatus === 'missed') filter.slaMet = false
+      if (slaStatus === 'breached') {
+        filter.slaMet   = null
+        filter.slaDueAt = { $lt: now, $ne: null }
+      }
+      if (slaStatus === 'at_risk') {
+        // Open, not yet due, but within the last SLA_AT_RISK_RATIO of its window.
+        filter.slaMet = null
+        filter.$expr = {
+          $and: [
+            { $ne: ['$slaDueAt', null] },
+            { $gte: ['$slaDueAt', now] },
+            {
+              $lte: [
+                { $subtract: ['$slaDueAt', now] },
+                { $multiply: [SLA_AT_RISK_RATIO, { $subtract: ['$slaDueAt', '$createdAt'] }] },
+              ],
+            },
+          ],
+        }
+      }
     }
     if (dateFrom || dateTo) {
       filter.createdAt = {
@@ -492,6 +541,63 @@ export async function assignEnquiry(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STAFF LIST FOR ASSIGNMENT  (feeds the Assign Staff modal)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StaffAssignOption {
+  id:           string
+  name:         string
+  email:        string
+  loadPercent:  number
+  isOverloaded: boolean
+  zoneMatch:    boolean   // staff's district/city coverage matches this enquiry's
+}
+
+export async function getStaffForAssignmentAction(
+  enquiryId: string
+): Promise<ActionResult<StaffAssignOption[]>> {
+  try {
+    await requirePermission('enquiry:assign')
+    await dbConnect()
+
+    const enquiry = await Enquiry.findById(enquiryId).select('district city').lean()
+    if (!enquiry) return { ok: false, error: 'Enquiry not found' }
+
+    const district = enquiry.district?.trim().toLowerCase()
+    const city     = enquiry.city?.trim().toLowerCase()
+
+    const staff = await User.find({ role: UserRole.Staff, status: UserStatus.Active })
+      .select('name email district city currentLoad maxLoad')
+      .lean()
+
+    const options: StaffAssignOption[] = staff.map((s) => {
+      const loadPercent = s.maxLoad > 0 ? Math.round((s.currentLoad / s.maxLoad) * 100) : 0
+      const zoneMatch =
+        (!!district && s.district?.trim().toLowerCase() === district) ||
+        (!!city     && s.city?.trim().toLowerCase()     === city)
+      return {
+        id:           String(s._id),
+        name:         s.name,
+        email:        s.email,
+        loadPercent,
+        isOverloaded: s.currentLoad >= s.maxLoad,
+        zoneMatch:    !!zoneMatch,
+      }
+    })
+
+    // Zone-matched staff first, then least-loaded first within each group.
+    options.sort((a, b) => {
+      if (a.zoneMatch !== b.zoneMatch) return a.zoneMatch ? -1 : 1
+      return a.loadPercent - b.loadPercent
+    })
+
+    return { ok: true, data: toPlain(options) }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STATS  (used by dashboard widgets)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -528,6 +634,18 @@ export async function getEnquiryStats() {
                 unassigned: { $sum: { $cond: [{ $eq: ['$status', EnquiryStatus.New] }, 1, 0] } },
                 inProgress: { $sum: { $cond: [{ $eq: ['$status', EnquiryStatus.InProgress] }, 1, 0] } },
                 resolved:   { $sum: { $cond: [{ $eq: ['$status', EnquiryStatus.Resolved] }, 1, 0] } },
+                slaBreached: {
+                  $sum: {
+                    $cond: [
+                      { $and: [
+                        { $eq: ['$slaMet', null] },
+                        { $ne: ['$slaDueAt', null] },
+                        { $lt: ['$slaDueAt', '$$NOW'] },
+                      ] },
+                      1, 0,
+                    ],
+                  },
+                },
               },
             },
           ],

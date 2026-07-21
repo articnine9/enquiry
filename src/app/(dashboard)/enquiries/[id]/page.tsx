@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth'
 import { getEnquiryById } from '@/features/enquiries/actions/enquiry.actions'
 import { StatusBadge } from '@/features/enquiries/components/StatusBadge'
 import { PriorityBadge } from '@/features/enquiries/components/PriorityBadge'
+import { SlaBadge } from '@/features/enquiries/components/SlaBadge'
 import EnquiryDetailActions from '@/features/enquiries/components/EnquiryDetailActions'
 import FollowUpSection from '@/features/followups/components/FollowUpSection'
 import { formatDate, formatDateTime } from '@/lib/utils'
@@ -156,6 +157,25 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
 
         {/* Sidebar */}
         <div className="space-y-4">
+          {/* SLA */}
+          <DetailCard title="SLA">
+            <div className="space-y-3">
+              <SlaBadge
+                createdAt={enquiry.createdAt}
+                dueAt={enquiry.slaDueAt}
+                slaMet={enquiry.slaMet}
+                isClosed={enquiry.status === 'cancelled'}
+                isPaused={enquiry.status === 'paused'}
+                showCountdown
+              />
+              {enquiry.slaDueAt && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Due {formatDateTime(enquiry.slaDueAt)}
+                </p>
+              )}
+            </div>
+          </DetailCard>
+
           {/* Assignment */}
           <DetailCard title="Assignment">
             {assignedUser ? (

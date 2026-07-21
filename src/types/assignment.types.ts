@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose'
+import type { UserRole } from './enums'
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -66,12 +67,14 @@ export interface AutoAssignParams {
   city?:       string
   district?:   string
   actorId:     string // system/manager id triggering auto-assign
+  actorRole:   UserRole
 }
 
 export interface ManualAssignParams {
   enquiryId: string
   staffId:   string
   actorId:   string
+  actorRole: UserRole
   reason?:   string
 }
 
@@ -79,12 +82,14 @@ export interface ReassignParams {
   enquiryId: string
   staffId:   string  // new staff
   actorId:   string
+  actorRole: UserRole
   reason:    string  // required for audit
 }
 
 export interface ReleaseParams {
   enquiryId:     string
   actorId:       string
+  actorRole:     UserRole
   releasedReason: string
 }
 

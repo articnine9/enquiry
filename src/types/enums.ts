@@ -18,6 +18,7 @@ export enum EnquiryStatus {
   New        = 'new',
   Assigned   = 'assigned',
   InProgress = 'in_progress',
+  Paused     = 'paused',      // SLA clock pauses while in this status
   FollowUp   = 'follow_up',
   Resolved   = 'resolved',
   Closed     = 'closed',
@@ -182,6 +183,7 @@ export const ENQUIRY_STATUS_LABELS: Record<EnquiryStatus, string> = {
   [EnquiryStatus.New]:        'New',
   [EnquiryStatus.Assigned]:   'Assigned',
   [EnquiryStatus.InProgress]: 'In Progress',
+  [EnquiryStatus.Paused]:     'Paused',
   [EnquiryStatus.FollowUp]:   'Follow Up',
   [EnquiryStatus.Resolved]:   'Resolved',
   [EnquiryStatus.Closed]:     'Closed',
@@ -217,7 +219,8 @@ export const ENQUIRY_PRODUCT_LABELS: Record<EnquiryProduct, string> = {
 export const ALLOWED_TRANSITIONS: Partial<Record<EnquiryStatus, EnquiryStatus[]>> = {
   [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Cancelled],
   [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Resolved,  EnquiryStatus.Cancelled],
+  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,    EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
   [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved,  EnquiryStatus.Cancelled],
   [EnquiryStatus.Resolved]:   [EnquiryStatus.Closed,     EnquiryStatus.InProgress],
   [EnquiryStatus.Closed]:     [],
