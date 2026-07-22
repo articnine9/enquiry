@@ -143,6 +143,8 @@ export const EnquiryFilterSchema = z.object({
   assignedTo:    z.string().optional(),
   city:          z.string().trim().optional(),
   district:      z.string().trim().optional(),
+  distributorId: z.string().optional(),
+  dealerId:      z.string().optional(),
   slaStatus:     z.enum(['breached', 'at_risk', 'met', 'missed']).optional(),
   dateFrom:      z.string().optional(),   // ISO date string
   dateTo:        z.string().optional(),

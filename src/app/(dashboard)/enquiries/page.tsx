@@ -33,6 +33,8 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
       enquirySource: sp('enquirySource') as never,
       product:       sp('product') as never,
       slaStatus:     sp('slaStatus') as never,
+      distributorId: sp('distributorId'),
+      dealerId:      sp('dealerId'),
       city:          sp('city'),
       page:          sp('page') ? Number(sp('page')) : 1,
       pageSize:      sp('pageSize') ? Number(sp('pageSize')) : 20,

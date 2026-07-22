@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ClipboardList, Users, MapPin,
   BarChart3, Bell, Shield, Settings, ChevronLeft,
-  CalendarClock, Activity,
+  CalendarClock, Activity, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -47,6 +47,12 @@ const NAV_ITEMS: NavItem[] = [
     href:  '/assignments',
     label: 'Assignments',
     icon:  MapPin,
+    roles: [UserRole.SuperAdmin, UserRole.Manager],
+  },
+  {
+    href:  '/distributors',
+    label: 'Distributors',
+    icon:  Truck,
     roles: [UserRole.SuperAdmin, UserRole.Manager],
   },
   {

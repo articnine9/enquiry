@@ -36,6 +36,7 @@ const COLUMNS: Column[] = [
   { key: 'enquirySource',label: 'Source',        className: 'w-28 hidden lg:table-cell' },
   { key: 'product',      label: 'Product',       className: 'w-32 hidden xl:table-cell' },
   { key: 'city',         label: 'City',          className: 'w-28 hidden md:table-cell' },
+  { key: 'channel',      label: 'Channel',       className: 'w-32 hidden xl:table-cell' },
   { key: 'assignedTo',   label: 'Assigned To',   className: 'w-36 hidden lg:table-cell' },
   { key: 'createdAt',    label: 'Created',       sortable: true, className: 'w-28 hidden sm:table-cell' },
   { key: 'actions',      label: '',              className: 'w-24' },
@@ -210,6 +211,13 @@ export default function EnquiryTable({
                   {/* City */}
                   <td className="px-4 py-3 whitespace-nowrap hidden md:table-cell text-xs text-slate-500 dark:text-slate-400">
                     {enquiry.city}
+                  </td>
+
+                  {/* Channel (dealer, falling back to distributor) */}
+                  <td className="px-4 py-3 whitespace-nowrap hidden xl:table-cell text-xs text-slate-500 dark:text-slate-400">
+                    {(enquiry.dealerId as unknown as { name: string })?.name
+                      ?? (enquiry.distributorId as unknown as { name: string })?.name
+                      ?? '—'}
                   </td>
 
                   {/* Assigned To */}

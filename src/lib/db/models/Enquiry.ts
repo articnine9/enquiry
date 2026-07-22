@@ -43,6 +43,11 @@ export interface IEnquiry {
   assignedBy?:   Types.ObjectId | 'system'
   assignedAt?:   Date
 
+  // Channel — auto-tagged from district/city at creation, editable afterward.
+  // Organisational/reporting only; does not affect staff assignment above.
+  distributorId?: Types.ObjectId | null
+  dealerId?:      Types.ObjectId | null
+
   // SLA — resolved via SLAPolicy at create/priority-change time, frozen at resolution
   slaPolicyId?:      Types.ObjectId | null
   slaDueAt?:         Date | null
@@ -251,6 +256,10 @@ const EnquirySchema = new Schema<EnquiryDocument>(
     assignedBy: { type: Schema.Types.Mixed },   // ObjectId | 'system'
     assignedAt: { type: Date },
 
+    // ── Channel (distributor / dealer) ─────────────────────────────────────────
+    distributorId: { type: Schema.Types.ObjectId, ref: 'Distributor', default: null },
+    dealerId:       { type: Schema.Types.ObjectId, ref: 'Dealer',       default: null },
+
     // ── SLA ───────────────────────────────────────────────────────────────────
     slaPolicyId:      { type: Schema.Types.ObjectId, ref: 'SLAPolicy', default: null },
     slaDueAt:         { type: Date,    default: null },
@@ -291,6 +300,8 @@ EnquirySchema.index({ customerName: 1 })
 EnquirySchema.index({ phone: 1 })
 EnquirySchema.index({ status: 1, slaDueAt: 1 })   // breached-open lookups
 EnquirySchema.index({ slaMet: 1 })                // compliance reporting
+EnquirySchema.index({ distributorId: 1, createdAt: -1 })
+EnquirySchema.index({ dealerId: 1, createdAt: -1 })
 // Full-text search across the most user-visible fields
 EnquirySchema.index(
   {

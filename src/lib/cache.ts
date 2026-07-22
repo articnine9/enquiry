@@ -14,6 +14,8 @@ export const CACHE_TAGS = {
   zones:         'zones',
   zone:          (id: string) => `zone-${id}`,
   masterData:    'master-data',
+  distributors:  'distributors',
+  dealers:       'dealers',
   // aggregate tags (invalidated when any record in the domain changes)
   dashboard:     'dashboard',
   reports:       'reports',

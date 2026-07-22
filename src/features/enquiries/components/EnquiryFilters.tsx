@@ -13,6 +13,8 @@ import {
 import type { MasterOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryFilterInput } from '../validations/enquiry.schema'
 import { useEffect, useState } from 'react'
+import { getDistributorsForSelectAction } from '@/features/distributors/actions/distributor.actions'
+import { getDealersByDistributorAction } from '@/features/distributors/actions/dealer.actions'
 
 // Enum-derived fallbacks — used when master-data options aren't supplied.
 const FALLBACK_PRIORITY = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
@@ -81,9 +83,32 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
     handleFilter('search', debouncedSearch || undefined as unknown as string)
   }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Distributor → Dealer dependent filter options
+  const [distributorOpts, setDistributorOpts] = useState<{ value: string; label: string }[]>([])
+  const [dealerOpts,      setDealerOpts]      = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    getDistributorsForSelectAction().then((r) => {
+      if (r.ok) setDistributorOpts(r.data.map((d) => ({ value: d._id, label: d.name })))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!filters.distributorId) { setDealerOpts([]); return }
+    getDealersByDistributorAction(filters.distributorId).then((r) => {
+      if (r.ok) setDealerOpts(r.data.filter((d) => d.isActive).map((d) => ({ value: d._id, label: d.name })))
+    })
+  }, [filters.distributorId])
+
+  function handleDistributorChange(distributorId: string) {
+    handleFilter('distributorId', distributorId)
+    handleFilter('dealerId', '') // clear a dealer that no longer belongs to the new distributor
+  }
+
   const hasActiveFilters =
     !!(filters.status || filters.priority || filters.enquirySource ||
-       filters.product || filters.city || filters.search || filters.slaStatus)
+       filters.product || filters.city || filters.search || filters.slaStatus ||
+       filters.distributorId || filters.dealerId)
 
   return (
     <div className="space-y-3">
@@ -168,6 +193,22 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
           value={filters.slaStatus ?? ''}
           onChange={(v) => handleFilter('slaStatus', v as EnquiryFilterInput['slaStatus'])}
           options={SLA_FILTER_OPTIONS}
+        />
+
+        <FilterSelect
+          id="distributorId"
+          placeholder="All Distributors"
+          value={filters.distributorId ?? ''}
+          onChange={handleDistributorChange}
+          options={distributorOpts}
+        />
+
+        <FilterSelect
+          id="dealerId"
+          placeholder="All Dealers"
+          value={filters.dealerId ?? ''}
+          onChange={(v) => handleFilter('dealerId', v)}
+          options={dealerOpts}
         />
 
         {/* City free-text filter */}

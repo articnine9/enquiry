@@ -39,6 +39,8 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
   const isCancelled = enquiry.status === 'cancelled' || enquiry.status === 'closed'
 
   const assignedUser = enquiry.assignedTo as unknown as { name: string; email: string } | null
+  const distributor   = enquiry.distributorId as unknown as { name: string; code: string } | null
+  const dealer         = enquiry.dealerId as unknown as { name: string } | null
 
   // Resolve master-data labels for display
   const [sourceLabel, productLabel, categoryLabel] = await Promise.all([
@@ -192,6 +194,26 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
               <p className="text-sm text-slate-400 italic">Not yet assigned</p>
             )}
           </DetailCard>
+
+          {/* Channel — distributor / dealer tag (reporting only) */}
+          {(distributor || dealer) && (
+            <DetailCard title="Channel">
+              <dl className="space-y-2 text-xs">
+                {distributor && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500 dark:text-slate-400">Distributor</dt>
+                    <dd className="font-medium text-slate-700 dark:text-slate-300 text-right">{distributor.name}</dd>
+                  </div>
+                )}
+                {dealer && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500 dark:text-slate-400">Dealer</dt>
+                    <dd className="font-medium text-slate-700 dark:text-slate-300 text-right">{dealer.name}</dd>
+                  </div>
+                )}
+              </dl>
+            </DetailCard>
+          )}
 
           {/* Timeline */}
           <DetailCard title="Timeline">

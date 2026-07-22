@@ -10,6 +10,7 @@ import { requireSession, requirePermission, authErrorToResult } from '@/lib/auth
 import { autoAssign } from '@/features/assignments/services/assignment.service'
 import { resolveMasterValue } from '@/features/settings/services/masterData.service'
 import { resolveSlaPolicy } from '@/features/settings/services/slaPolicy.service'
+import { resolveChannelByArea } from '@/features/distributors/services/distributor-matcher.service'
 import { computeSlaDueAt, SLA_AT_RISK_RATIO } from '@/lib/sla'
 import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
@@ -107,14 +108,17 @@ export async function createEnquiry(
       return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors, values: raw }
     }
 
-    const now    = new Date()
-    const policy = await resolveSlaPolicy(parsed.data.priority, parsed.data.category)
+    const now     = new Date()
+    const policy  = await resolveSlaPolicy(parsed.data.priority, parsed.data.category)
+    const channel = await resolveChannelByArea({ district: parsed.data.district, city: parsed.data.city })
 
     const enquiry = await Enquiry.create({
       ...parsed.data,
       priorityWeight: master.priorityWeight ?? 2,
       slaPolicyId:    policy.policyId,
       slaDueAt:       computeSlaDueAt(now, policy.resolutionMinutes),
+      distributorId:  channel.distributorId ?? null,
+      dealerId:       channel.dealerId ?? null,
       createdBy:      session.user.id,
     })
 
@@ -206,6 +210,15 @@ export async function updateEnquiry(
       const policy   = await resolveSlaPolicy(priority, category)
       update.slaPolicyId = policy.policyId
       update.slaDueAt    = computeSlaDueAt(new Date(before.createdAt), policy.resolutionMinutes)
+    }
+
+    // Re-resolve the distributor/dealer channel tag when district or city changes.
+    if (parsed.data.district != null || parsed.data.city != null) {
+      const district = parsed.data.district ?? before.district
+      const city      = parsed.data.city ?? before.city
+      const channel   = await resolveChannelByArea({ district, city })
+      update.distributorId = channel.distributorId ?? null
+      update.dealerId      = channel.dealerId ?? null
     }
 
     const enquiry = await Enquiry.findByIdAndUpdate(
@@ -343,6 +356,8 @@ export async function getEnquiryById(
       .select('+internalNotes')
       .populate('assignedTo', 'name email avatar phone')
       .populate('createdBy',  'name email')
+      .populate('distributorId', 'name code territory')
+      .populate('dealerId',      'name')
 
     // Staff scoping — only their own enquiries
     if (session.user.role === UserRole.Staff) {
@@ -380,7 +395,7 @@ export async function getEnquiries(
 
     const {
       search, status, priority, enquirySource, product,
-      category, assignedTo, city, district, slaStatus,
+      category, assignedTo, city, district, distributorId, dealerId, slaStatus,
       dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
     } = parsed.data
 
@@ -407,6 +422,8 @@ export async function getEnquiries(
     if (category)      filter.category      = category
     if (city)          filter.city          = { $regex: city, $options: 'i' }
     if (district)      filter.district      = { $regex: district, $options: 'i' }
+    if (distributorId) filter.distributorId = distributorId
+    if (dealerId)      filter.dealerId      = dealerId
     if (assignedTo && session.user.role !== UserRole.Staff) {
       filter.assignedTo = assignedTo
     }
@@ -456,6 +473,8 @@ export async function getEnquiries(
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate('assignedTo', 'name avatar')
+        .populate('distributorId', 'name code')
+        .populate('dealerId', 'name')
         .lean(),
       Enquiry.countDocuments(filter),
     ])
