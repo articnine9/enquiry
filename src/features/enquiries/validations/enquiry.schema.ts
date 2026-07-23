@@ -3,6 +3,7 @@ import {
   EnquiryStatus,
   EnquiryPriority,
   EnquiryCategory,
+  LeadStage,
 } from '@/types/enums'
 
 // ─── Re-usable field definitions ─────────────────────────────────────────────
@@ -136,6 +137,7 @@ export type UpdateStatusInput = z.infer<typeof UpdateStatusSchema>
 export const EnquiryFilterSchema = z.object({
   search:        z.string().trim().optional(),
   status:        z.nativeEnum(EnquiryStatus).optional(),
+  leadStage:     z.nativeEnum(LeadStage).optional(),
   priority:      z.string().trim().optional(),
   enquirySource: z.string().trim().optional(),
   product:       z.string().trim().optional(),

@@ -29,6 +29,7 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
     getEnquiries({
       search:        sp('search'),
       status:        sp('status') as never,
+      leadStage:     sp('leadStage') as never,
       priority:      sp('priority') as never,
       enquirySource: sp('enquirySource') as never,
       product:       sp('product') as never,

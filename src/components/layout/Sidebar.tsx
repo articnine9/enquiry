@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ClipboardList, Users, MapPin,
   BarChart3, Bell, Shield, Settings, ChevronLeft,
-  CalendarClock, Activity, Truck,
+  CalendarClock, Activity, Truck, Users2, Footprints,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -54,6 +54,18 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Distributors',
     icon:  Truck,
     roles: [UserRole.SuperAdmin, UserRole.Manager],
+  },
+  {
+    href:  '/customers',
+    label: 'Customers',
+    icon:  Users2,
+    roles: [UserRole.SuperAdmin, UserRole.Manager],
+  },
+  {
+    href:  '/field-visits',
+    label: 'Field Visits',
+    icon:  Footprints,
+    roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
   },
   {
     href:  '/reports',

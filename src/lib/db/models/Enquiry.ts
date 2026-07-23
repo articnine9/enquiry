@@ -5,6 +5,7 @@ import {
   EnquirySource,
   EnquiryCategory,
   EnquiryProduct,
+  LeadStage,
 } from '@/types/enums'
 
 // ─── TypeScript interface ─────────────────────────────────────────────────────
@@ -30,6 +31,8 @@ export interface IEnquiry {
   priority:      string
   priorityWeight: number
   status:        EnquiryStatus
+  // Sales pipeline stage — independent of status above. Free picklist, no FSM.
+  leadStage:     LeadStage
 
   // Detail
   subject:       string
@@ -47,6 +50,13 @@ export interface IEnquiry {
   // Organisational/reporting only; does not affect staff assignment above.
   distributorId?: Types.ObjectId | null
   dealerId?:      Types.ObjectId | null
+
+  // Set once, the first time leadStage crosses into a converted stage — guards
+  // against creating duplicate Customer purchase-history entries for the same deal.
+  convertedAt?:   Date | null
+  // Deal value captured at conversion — feeds Revenue Generated on the Staff
+  // performance dashboard. Null for leads not yet converted (or legacy records).
+  dealValue?:     number | null
 
   // SLA — resolved via SLAPolicy at create/priority-change time, frozen at resolution
   slaPolicyId?:      Types.ObjectId | null
@@ -222,6 +232,15 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       },
       default: EnquiryStatus.New,
     },
+    // Sales pipeline stage — independent of status. No transition guard.
+    leadStage: {
+      type: String,
+      enum: {
+        values:  Object.values(LeadStage),
+        message: 'Invalid lead stage: {VALUE}',
+      },
+      default: LeadStage.NewLead,
+    },
 
     // ── Detail ────────────────────────────────────────────────────────────────
     subject: {
@@ -259,6 +278,8 @@ const EnquirySchema = new Schema<EnquiryDocument>(
     // ── Channel (distributor / dealer) ─────────────────────────────────────────
     distributorId: { type: Schema.Types.ObjectId, ref: 'Distributor', default: null },
     dealerId:       { type: Schema.Types.ObjectId, ref: 'Dealer',       default: null },
+    convertedAt:    { type: Date, default: null },
+    dealValue:      { type: Number, min: 0, default: null },
 
     // ── SLA ───────────────────────────────────────────────────────────────────
     slaPolicyId:      { type: Schema.Types.ObjectId, ref: 'SLAPolicy', default: null },
@@ -302,6 +323,7 @@ EnquirySchema.index({ status: 1, slaDueAt: 1 })   // breached-open lookups
 EnquirySchema.index({ slaMet: 1 })                // compliance reporting
 EnquirySchema.index({ distributorId: 1, createdAt: -1 })
 EnquirySchema.index({ dealerId: 1, createdAt: -1 })
+EnquirySchema.index({ leadStage: 1, createdAt: -1 })
 // Full-text search across the most user-visible fields
 EnquirySchema.index(
   {

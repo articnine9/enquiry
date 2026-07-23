@@ -68,7 +68,8 @@ export async function createFollowUpAction(
     })
 
     await ActivityLog.create({
-      userId:      session.user.id,
+      actorId:     session.user.id,
+      actorRole:   session.user.role,
       action:      ActivityAction.FollowUpCreated,
       entityType:  EntityType.FollowUp,
       entityId:    followUp._id,
@@ -145,7 +146,8 @@ export async function updateFollowUpAction(
     if (!followUp) return { ok: false, error: 'Follow-up not found' }
 
     await ActivityLog.create({
-      userId:      session.user.id,
+      actorId:     session.user.id,
+      actorRole:   session.user.role,
       action:      ActivityAction.FollowUpUpdated,
       entityType:  EntityType.FollowUp,
       entityId:    id,
@@ -244,7 +246,8 @@ export async function closeFollowUpAction(
         : ActivityAction.FollowUpUpdated
 
     await ActivityLog.create({
-      userId:      session.user.id,
+      actorId:     session.user.id,
+      actorRole:   session.user.role,
       action:      actionName,
       entityType:  EntityType.FollowUp,
       entityId:    id,

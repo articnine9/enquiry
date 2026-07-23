@@ -11,6 +11,7 @@ import { autoAssign } from '@/features/assignments/services/assignment.service'
 import { resolveMasterValue } from '@/features/settings/services/masterData.service'
 import { resolveSlaPolicy } from '@/features/settings/services/slaPolicy.service'
 import { resolveChannelByArea } from '@/features/distributors/services/distributor-matcher.service'
+import { convertEnquiryToCustomer } from '@/features/customers/services/customer-conversion.service'
 import { computeSlaDueAt, SLA_AT_RISK_RATIO } from '@/lib/sla'
 import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
@@ -28,6 +29,8 @@ import {
   UserRole,
   UserStatus,
   EnquiryStatus,
+  LeadStage,
+  LEAD_STAGE_CONVERTED,
 } from '@/types/enums'
 import type { ActionResult, PaginatedResult } from '@/types/api'
 
@@ -341,6 +344,80 @@ export async function updateEnquiryStatus(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UPDATE LEAD STAGE
+// Free picklist — no transition guard, unlike status above. Independent axis:
+// where the deal sits in the sales pipeline, not whether the ticket is open.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function updateLeadStageAction(
+  id:        string,
+  leadStage: string,
+  dealValue?: number | null
+): Promise<ActionResult<{ leadStage: LeadStage }>> {
+  try {
+    const session = await requirePermission('enquiry:update_status')
+
+    if (!Object.values(LeadStage).includes(leadStage as LeadStage)) {
+      return { ok: false, error: 'Invalid lead stage' }
+    }
+
+    await dbConnect()
+    const before = await Enquiry.findById(id)
+      .select('leadStage assignedTo convertedAt customerName phone email address city district product category distributorId dealerId')
+      .lean()
+    if (!before) return { ok: false, error: 'Enquiry not found' }
+
+    if (
+      session.user.role === UserRole.Staff &&
+      String(before.assignedTo) !== session.user.id
+    ) {
+      return { ok: false, error: 'You can only update enquiries assigned to you' }
+    }
+
+    // First time this enquiry crosses into a converted stage — move it into the
+    // Customer database. Guarded by convertedAt so later stage moves among the
+    // converted set (e.g. Order Confirmed → Delivered) don't double-count it.
+    const now = new Date()
+    const isConverting =
+      LEAD_STAGE_CONVERTED.includes(leadStage as LeadStage) && !before.convertedAt
+
+    const update: Record<string, unknown> = { leadStage }
+    if (isConverting) {
+      update.convertedAt = now
+      if (dealValue != null) update.dealValue = dealValue
+    }
+
+    await Enquiry.findByIdAndUpdate(id, { $set: update })
+
+    if (isConverting) {
+      await convertEnquiryToCustomer({ ...before, dealValue }, now).catch((err) => {
+        console.error(`Customer conversion failed for enquiry ${id}:`, err)
+      })
+    }
+
+    await ActivityLog.create({
+      actorId:    session.user.id,
+      actorRole:  session.user.role,
+      action:     ActivityAction.LeadStageChanged,
+      entityType: EntityType.Enquiry,
+      entityId:   id,
+      changes: {
+        before: { leadStage: before.leadStage },
+        after:  { leadStage },
+      },
+    })
+
+    revalidateTag(CACHE_TAGS.enquiries)
+    revalidateTag(CACHE_TAGS.enquiry(id))
+    revalidateTag(CACHE_TAGS.dashboard)
+
+    return { ok: true, data: { leadStage: leadStage as LeadStage } }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET ONE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -394,7 +471,7 @@ export async function getEnquiries(
     }
 
     const {
-      search, status, priority, enquirySource, product,
+      search, status, leadStage, priority, enquirySource, product,
       category, assignedTo, city, district, distributorId, dealerId, slaStatus,
       dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
     } = parsed.data
@@ -416,6 +493,7 @@ export async function getEnquiries(
       filter.$text = { $search: search }
     }
     if (status)        filter.status        = status
+    if (leadStage)     filter.leadStage     = leadStage
     if (priority)      filter.priority      = priority
     if (enquirySource) filter.enquirySource = enquirySource
     if (product)       filter.product       = product

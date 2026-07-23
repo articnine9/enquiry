@@ -12,6 +12,7 @@ import { useEnquiryStore } from '@/store/enquiry.store'
 import { deleteEnquiry } from '../actions/enquiry.actions'
 import { StatusBadge } from './StatusBadge'
 import { PriorityBadge } from './PriorityBadge'
+import { LeadStageBadge } from './LeadStageBadge'
 import { SlaBadge } from './SlaBadge'
 import { cn, formatDate, getInitials } from '@/lib/utils'
 import { UserRole, EnquiryStatus, ENQUIRY_SOURCE_LABELS } from '@/types/enums'
@@ -31,6 +32,7 @@ const COLUMNS: Column[] = [
   { key: 'enquiryNo',    label: 'Ref #',        className: 'w-32' },
   { key: 'customerName', label: 'Customer',      sortable: true },
   { key: 'status',       label: 'Status',        className: 'w-32' },
+  { key: 'leadStage',    label: 'Lead Stage',    className: 'w-36 hidden lg:table-cell' },
   { key: 'priority',     label: 'Priority',      className: 'w-28' },
   { key: 'sla',          label: 'SLA',           className: 'w-32' },
   { key: 'enquirySource',label: 'Source',        className: 'w-28 hidden lg:table-cell' },
@@ -179,6 +181,11 @@ export default function EnquiryTable({
                   {/* Status */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <StatusBadge status={enquiry.status} size="sm" />
+                  </td>
+
+                  {/* Lead Stage */}
+                  <td className="px-4 py-3 whitespace-nowrap hidden lg:table-cell">
+                    <LeadStageBadge stage={enquiry.leadStage} size="sm" />
                   </td>
 
                   {/* Priority */}

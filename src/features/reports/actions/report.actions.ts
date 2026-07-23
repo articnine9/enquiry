@@ -5,25 +5,35 @@ import Enquiry from '@/lib/db/models/Enquiry'
 import User from '@/lib/db/models/User'
 import FollowUp from '@/lib/db/models/FollowUp'
 import StaffDailyStat from '@/lib/db/models/StaffDailyStat'
-import { requireRole } from '@/lib/auth/session'
-import { UserRole, EnquiryStatus } from '@/types/enums'
+import { requireRole, requirePermission } from '@/lib/auth/session'
+import {
+  UserRole,
+  LEAD_STAGE_ORDER, LEAD_STAGE_LABELS, LEAD_STAGE_COLORS, LEAD_STAGE_CONVERTED,
+} from '@/types/enums'
 import type { ActionResult } from '@/types/api'
 import type {
   ReportFilters,
   EnquirySummaryData,
   EnquiryCountByKey,
   StaffPerformanceData,
+  StaffPerfRow,
   ZonePerformanceData,
   FollowUpReportData,
   ConversionFunnelData,
   FunnelStage,
+  MarketingReportData,
+  ChannelPerformanceData,
 } from '../types/report.types'
 import {
   buildEnquiryReportPipeline,
   buildStaffPerformanceReportPipeline,
+  buildStaffLeadStatsPipeline,
   buildZonePerformanceReportPipeline,
   buildFollowUpReportPipeline,
   buildConversionFunnelPipeline,
+  buildMarketingReportPipeline,
+  buildDealerPerformancePipeline,
+  buildDistributorPerformancePipeline,
 } from '../aggregations/report.pipelines'
 import { resolveDateRange } from '../utils/date-range'
 
@@ -84,11 +94,56 @@ export async function getStaffPerformanceReportAction(
   rawFilters: ReportFilters
 ): Promise<ActionResult<StaffPerformanceData>> {
   try {
-    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    const session = await requirePermission('report:read')
     await dbConnect()
 
-    const filters = { ...rawFilters, ...resolveDateRange(rawFilters) }
-    const rows    = await StaffDailyStat.aggregate(buildStaffPerformanceReportPipeline(filters))
+    // Staff can only ever see their own row, regardless of what was requested.
+    const filters = {
+      ...rawFilters,
+      ...resolveDateRange(rawFilters),
+      staffId: session.user.role === UserRole.Staff ? session.user.id : rawFilters.staffId,
+    }
+
+    const [activityRows, leadStatRows] = await Promise.all([
+      StaffDailyStat.aggregate(buildStaffPerformanceReportPipeline(filters)),
+      Enquiry.aggregate(buildStaffLeadStatsPipeline(filters)),
+    ])
+
+    const leadStatsById = new Map(
+      leadStatRows.map((r: { staffId: string }) => [r.staffId, r])
+    )
+
+    // Staff activity (StaffDailyStat) is the base row set — a staff member with
+    // leads but no logged activity days still deserves a row, so union in any
+    // lead-stat staffIds missing from the activity rows with zeroed activity fields.
+    const activityIds = new Set(activityRows.map((r: { staffId: string }) => r.staffId))
+    const leadOnlyRows = leadStatRows
+      .filter((r: { staffId: string }) => !activityIds.has(r.staffId))
+      .map((r: { staffId: string }) => ({ staffId: r.staffId }))
+
+    const staffIdsNeedingUser = leadOnlyRows.map((r: { staffId: string }) => r.staffId)
+    const extraUsers = staffIdsNeedingUser.length
+      ? await User.find({ _id: { $in: staffIdsNeedingUser } }).select('name email').lean()
+      : []
+    const userById = new Map(extraUsers.map((u) => [String(u._id), u]))
+
+    const emptyLeadStats = { leadsAssigned: 0, leadsConverted: 0, leadConversionRate: 0, revenueGenerated: 0 }
+
+    const rows: StaffPerfRow[] = [
+      ...activityRows.map((r) => ({ ...r, ...(leadStatsById.get(r.staffId) ?? emptyLeadStats) })),
+      ...leadOnlyRows
+        .filter((r: { staffId: string }) => userById.has(r.staffId))
+        .map((r: { staffId: string }) => ({
+          staffId: r.staffId,
+          name:    userById.get(r.staffId)!.name,
+          email:   userById.get(r.staffId)!.email,
+          zoneName: 'Unassigned',
+          activeDays: 0, enquiriesAssigned: 0, enquiriesResolved: 0, resolutionRate: 0,
+          callsMade: 0, followUpsCompleted: 0, followUpsMissed: 0, totalOnlineMinutes: 0,
+          avgScore: 0, totalScore: 0,
+          ...(leadStatsById.get(r.staffId) ?? emptyLeadStats),
+        })),
+    ]
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -97,9 +152,15 @@ export async function getStaffPerformanceReportAction(
         callsMade:          acc.callsMade          + r.callsMade,
         followUpsCompleted: acc.followUpsCompleted + r.followUpsCompleted,
         totalOnlineMinutes: acc.totalOnlineMinutes + r.totalOnlineMinutes,
+        leadsAssigned:      acc.leadsAssigned      + r.leadsAssigned,
+        leadsConverted:     acc.leadsConverted     + r.leadsConverted,
+        revenueGenerated:   acc.revenueGenerated   + r.revenueGenerated,
         avgTeamScore:       0,
       }),
-      { enquiriesAssigned: 0, enquiriesResolved: 0, callsMade: 0, followUpsCompleted: 0, totalOnlineMinutes: 0, avgTeamScore: 0 }
+      {
+        enquiriesAssigned: 0, enquiriesResolved: 0, callsMade: 0, followUpsCompleted: 0,
+        totalOnlineMinutes: 0, leadsAssigned: 0, leadsConverted: 0, revenueGenerated: 0, avgTeamScore: 0,
+      }
     )
 
     totals.avgTeamScore = rows.length
@@ -185,14 +246,12 @@ export async function getFollowUpReportAction(
 
 // ── 5. Conversion Funnel ──────────────────────────────────────────────────────
 
-const FUNNEL_ORDER = [
-  { status: EnquiryStatus.New,        label: 'New',         color: '#6366f1' },
-  { status: EnquiryStatus.Assigned,   label: 'Assigned',    color: '#3b82f6' },
-  { status: EnquiryStatus.InProgress, label: 'In Progress', color: '#f59e0b' },
-  { status: EnquiryStatus.FollowUp,   label: 'Follow-up',   color: '#8b5cf6' },
-  { status: EnquiryStatus.Resolved,   label: 'Resolved',    color: '#10b981' },
-  { status: EnquiryStatus.Closed,     label: 'Closed',      color: '#14b8a6' },
-]
+// Ordered by LEAD_STAGE_ORDER (Lost excluded — it's an off-ramp, not a funnel step).
+const FUNNEL_ORDER = LEAD_STAGE_ORDER.map((stage) => ({
+  status: stage,
+  label:  LEAD_STAGE_LABELS[stage],
+  color:  LEAD_STAGE_COLORS[stage],
+}))
 
 export async function getConversionFunnelAction(
   rawFilters: ReportFilters
@@ -217,7 +276,6 @@ export async function getConversionFunnelAction(
         .map((s) => [s.status, s.count])
     )
 
-    const topCount  = countMap[EnquiryStatus.New] ?? total
     const stages: FunnelStage[] = FUNNEL_ORDER.map((s, i) => {
       const count = countMap[s.status] ?? 0
       const pct   = total > 0 ? Math.round((count / total) * 1000) / 10 : 0
@@ -226,13 +284,89 @@ export async function getConversionFunnelAction(
       return { ...s, count, pct, dropOffPct }
     })
 
-    const converted = (countMap[EnquiryStatus.Resolved] ?? 0) + (countMap[EnquiryStatus.Closed] ?? 0)
+    const converted = LEAD_STAGE_CONVERTED.reduce((sum, stage) => sum + (countMap[stage] ?? 0), 0)
     const conversionRate = total > 0 ? Math.round((converted / total) * 1000) / 10 : 0
 
     return {
       ok:   true,
       data: toPlain({ stages, conversionRate, totalEnquiries: total, converted }),
     }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load report' }
+  }
+}
+
+// ── 6. Marketing Dashboard ─────────────────────────────────────────────────────
+
+export async function getMarketingReportAction(
+  rawFilters: ReportFilters
+): Promise<ActionResult<MarketingReportData>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await dbConnect()
+
+    const filters  = { ...rawFilters, ...resolveDateRange(rawFilters) }
+    const bySource = await Enquiry.aggregate(buildMarketingReportPipeline(filters))
+
+    const totalLeads = bySource.reduce((s: number, r: { leads: number }) => s + r.leads, 0)
+
+    return { ok: true, data: toPlain({ totalLeads, bySource }) }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load report' }
+  }
+}
+
+// ── 7. Dealer / Distributor Performance ───────────────────────────────────────
+
+export async function getDealerPerformanceReportAction(
+  rawFilters: ReportFilters
+): Promise<ActionResult<ChannelPerformanceData>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await dbConnect()
+
+    const filters = { ...rawFilters, ...resolveDateRange(rawFilters) }
+    const rows    = await Enquiry.aggregate(buildDealerPerformancePipeline(filters))
+
+    const totals = rows.reduce(
+      (acc: { leadsReceived: number; leadsConverted: number }, r: { leadsReceived: number; leadsConverted: number }) => ({
+        leadsReceived:  acc.leadsReceived  + r.leadsReceived,
+        leadsConverted: acc.leadsConverted + r.leadsConverted,
+      }),
+      { leadsReceived: 0, leadsConverted: 0 }
+    )
+    const conversionRate = totals.leadsReceived > 0
+      ? Math.round((totals.leadsConverted / totals.leadsReceived) * 1000) / 10
+      : 0
+
+    return { ok: true, data: toPlain({ rows, totals: { ...totals, conversionRate } }) }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load report' }
+  }
+}
+
+export async function getDistributorPerformanceReportAction(
+  rawFilters: ReportFilters
+): Promise<ActionResult<ChannelPerformanceData>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await dbConnect()
+
+    const filters = { ...rawFilters, ...resolveDateRange(rawFilters) }
+    const rows    = await Enquiry.aggregate(buildDistributorPerformancePipeline(filters))
+
+    const totals = rows.reduce(
+      (acc: { leadsReceived: number; leadsConverted: number }, r: { leadsReceived: number; leadsConverted: number }) => ({
+        leadsReceived:  acc.leadsReceived  + r.leadsReceived,
+        leadsConverted: acc.leadsConverted + r.leadsConverted,
+      }),
+      { leadsReceived: 0, leadsConverted: 0 }
+    )
+    const conversionRate = totals.leadsReceived > 0
+      ? Math.round((totals.leadsConverted / totals.leadsReceived) * 1000) / 10
+      : 0
+
+    return { ok: true, data: toPlain({ rows, totals: { ...totals, conversionRate } }) }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to load report' }
   }
@@ -245,7 +379,7 @@ export async function getReportFilterOptionsAction(): Promise<ActionResult<{
   staff:  { _id: string; name: string }[]
 }>> {
   try {
-    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await requirePermission('report:read')
     await dbConnect()
 
     const LocationZone = (await import('@/lib/db/models/LocationZone')).default

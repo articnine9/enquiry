@@ -17,6 +17,9 @@ export type ReportType =
   | 'zone'
   | 'followup'
   | 'conversion'
+  | 'marketing'
+  | 'dealer'
+  | 'distributor'
 
 export interface ReportFilters {
   period:    ReportPeriod
@@ -28,6 +31,8 @@ export interface ReportFilters {
   priority?: string
   source?:   string
   category?: string
+  dealerId?:       string
+  distributorId?:  string
 }
 
 // ── Enquiry summary report ────────────────────────────────────────────────────
@@ -94,6 +99,11 @@ export interface StaffPerfRow {
   totalOnlineMinutes: number
   avgScore:           number
   totalScore:         number
+  // Lead-based metrics (from Enquiry.leadStage/dealValue, not StaffDailyStat)
+  leadsAssigned:      number
+  leadsConverted:     number
+  leadConversionRate: number
+  revenueGenerated:   number
 }
 
 export interface StaffPerfTrendPoint {
@@ -110,6 +120,9 @@ export interface StaffPerformanceData {
     followUpsCompleted: number
     totalOnlineMinutes: number
     avgTeamScore:       number
+    leadsAssigned:      number
+    leadsConverted:     number
+    revenueGenerated:   number
   }
 }
 
@@ -190,4 +203,37 @@ export interface ConversionFunnelData {
   conversionRate: number
   totalEnquiries: number
   converted:      number
+}
+
+// ── Marketing dashboard ───────────────────────────────────────────────────────
+
+export interface MarketingSourceRow {
+  source:         string
+  leads:          number
+  converted:      number
+  conversionRate: number
+}
+
+export interface MarketingReportData {
+  totalLeads: number
+  bySource:   MarketingSourceRow[]
+}
+
+// ── Dealer / Distributor performance dashboards ───────────────────────────────
+
+export interface ChannelPerfRow {
+  id:             string
+  name:           string
+  leadsReceived:  number
+  leadsConverted: number
+  conversionRate: number
+}
+
+export interface ChannelPerformanceData {
+  rows:   ChannelPerfRow[]
+  totals: {
+    leadsReceived:  number
+    leadsConverted: number
+    conversionRate: number
+  }
 }

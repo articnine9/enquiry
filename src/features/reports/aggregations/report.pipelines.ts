@@ -1,5 +1,5 @@
 import type { PipelineStage } from 'mongoose'
-import { EnquiryStatus, UserRole } from '@/types/enums'
+import { EnquiryStatus, UserRole, LEAD_STAGE_CONVERTED } from '@/types/enums'
 import type { ReportFilters } from '../types/report.types'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -32,10 +32,10 @@ function addPctField(total: number): PipelineStage {
 export function buildEnquiryReportPipeline(filters: ReportFilters): PipelineStage[] {
   const match: Record<string, unknown> = {}
 
-  if (filters.status)   match['status']   = filters.status
-  if (filters.priority) match['priority'] = filters.priority
-  if (filters.source)   match['source']   = filters.source
-  if (filters.category) match['category'] = filters.category
+  if (filters.status)   match['status']        = filters.status
+  if (filters.priority) match['priority']      = filters.priority
+  if (filters.source)   match['enquirySource'] = filters.source
+  if (filters.category) match['category']      = filters.category
 
   const rangeMatch: Record<string, unknown> = {
     ...match,
@@ -72,7 +72,7 @@ export function buildEnquiryReportPipeline(filters: ReportFilters): PipelineStag
         ],
         bySource: [
           { $match: rangeMatch },
-          { $group: { _id: '$source', count: { $sum: 1 } } },
+          { $group: { _id: '$enquirySource', count: { $sum: 1 } } },
           { $sort: { count: -1 } },
         ],
         byCategory: [
@@ -149,10 +149,10 @@ export function buildEnquiryReportPipeline(filters: ReportFilters): PipelineStag
             $project: {
               _id:       { $toString: '$_id' },
               enquiryNo: 1,
-              name:      1,
+              name:      '$customerName',
               status:    1,
               priority:  1,
-              source:    1,
+              source:    '$enquirySource',
               category:  1,
               createdAt: 1,
               updatedAt: 1,
@@ -528,7 +528,7 @@ export function buildConversionFunnelPipeline(filters: ReportFilters): PipelineS
     { $match: match },
     {
       $group: {
-        _id:       '$status',
+        _id:       '$leadStage',
         count:     { $sum: 1 },
       },
     },
@@ -547,4 +547,165 @@ export function buildConversionFunnelPipeline(filters: ReportFilters): PipelineS
       },
     },
   ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. MARKETING DASHBOARD — leads generated, by source, conversion by source
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function buildMarketingReportPipeline(filters: ReportFilters): PipelineStage[] {
+  const match: Record<string, unknown> = { createdAt: dateRange(filters) }
+
+  return [
+    { $match: match },
+    {
+      $group: {
+        _id:       '$enquirySource',
+        leads:     { $sum: 1 },
+        converted: { $sum: { $cond: [{ $in: ['$leadStage', LEAD_STAGE_CONVERTED] }, 1, 0] } },
+      },
+    },
+    {
+      $addFields: {
+        conversionRate: {
+          $cond: [
+            { $gt: ['$leads', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$converted', '$leads'] }, 100] }, 1] },
+            0,
+          ],
+        },
+      },
+    },
+    {
+      $project: {
+        _id:    0,
+        source: '$_id',
+        leads: 1,
+        converted: 1,
+        conversionRate: 1,
+      },
+    },
+    { $sort: { leads: -1 } },
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. STAFF LEAD STATS — leads assigned/converted/revenue, by staff (Enquiry-based,
+//    distinct from buildStaffPerformanceReportPipeline which reads StaffDailyStat
+//    activity counters — this reads leadStage/dealValue directly off Enquiry)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function buildStaffLeadStatsPipeline(filters: ReportFilters): PipelineStage[] {
+  const match: Record<string, unknown> = {
+    createdAt:  dateRange(filters),
+    assignedTo: { $exists: true, $ne: null },
+  }
+
+  if (filters.staffId) {
+    const { Types } = require('mongoose') as typeof import('mongoose')
+    match['assignedTo'] = new Types.ObjectId(filters.staffId)
+  }
+
+  return [
+    { $match: match },
+    {
+      $group: {
+        _id:              '$assignedTo',
+        leadsAssigned:    { $sum: 1 },
+        leadsConverted:   { $sum: { $cond: [{ $in: ['$leadStage', LEAD_STAGE_CONVERTED] }, 1, 0] } },
+        revenueGenerated: { $sum: { $ifNull: ['$dealValue', 0] } },
+      },
+    },
+    {
+      $addFields: {
+        leadConversionRate: {
+          $cond: [
+            { $gt: ['$leadsAssigned', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$leadsConverted', '$leadsAssigned'] }, 100] }, 1] },
+            0,
+          ],
+        },
+      },
+    },
+    {
+      $project: {
+        _id:                0,
+        staffId:            { $toString: '$_id' },
+        leadsAssigned:      1,
+        leadsConverted:     1,
+        leadConversionRate: 1,
+        revenueGenerated:   1,
+      },
+    },
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. DEALER / DISTRIBUTOR PERFORMANCE — leads received/converted, conversion %
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildChannelPerformancePipeline(
+  filters: ReportFilters,
+  channelField: 'dealerId' | 'distributorId',
+  lookupCollection: string
+): PipelineStage[] {
+  const match: Record<string, unknown> = {
+    createdAt: dateRange(filters),
+    [channelField]: { $exists: true, $ne: null },
+  }
+
+  const filterId = channelField === 'dealerId' ? filters.dealerId : filters.distributorId
+  if (filterId) {
+    const { Types } = require('mongoose') as typeof import('mongoose')
+    match[channelField] = new Types.ObjectId(filterId)
+  }
+
+  return [
+    { $match: match },
+    {
+      $group: {
+        _id:            `$${channelField}`,
+        leadsReceived:  { $sum: 1 },
+        leadsConverted: { $sum: { $cond: [{ $in: ['$leadStage', LEAD_STAGE_CONVERTED] }, 1, 0] } },
+      },
+    },
+    {
+      $lookup: {
+        from:         lookupCollection,
+        localField:   '_id',
+        foreignField: '_id',
+        as:           'entity',
+      },
+    },
+    {
+      $addFields: {
+        conversionRate: {
+          $cond: [
+            { $gt: ['$leadsReceived', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$leadsConverted', '$leadsReceived'] }, 100] }, 1] },
+            0,
+          ],
+        },
+      },
+    },
+    {
+      $project: {
+        _id:            0,
+        id:             { $toString: '$_id' },
+        name:           { $ifNull: [{ $arrayElemAt: ['$entity.name', 0] }, 'Unknown'] },
+        leadsReceived:  1,
+        leadsConverted: 1,
+        conversionRate: 1,
+      },
+    },
+    { $sort: { leadsReceived: -1 } },
+  ]
+}
+
+export function buildDealerPerformancePipeline(filters: ReportFilters): PipelineStage[] {
+  return buildChannelPerformancePipeline(filters, 'dealerId', 'dealers')
+}
+
+export function buildDistributorPerformancePipeline(filters: ReportFilters): PipelineStage[] {
+  return buildChannelPerformancePipeline(filters, 'distributorId', 'distributors')
 }

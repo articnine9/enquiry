@@ -25,6 +25,24 @@ export enum EnquiryStatus {
   Cancelled  = 'cancelled',
 }
 
+// ── Lead stage (sales pipeline) ─────────────────────────────────────────────
+// Independent of EnquiryStatus above — status is the operational ticket
+// lifecycle (SLA, staff workload); LeadStage is where the deal sits in the
+// sales process. No transition guard: any stage is settable at any time.
+export enum LeadStage {
+  NewLead        = 'new_lead',
+  Assigned       = 'assigned',
+  Contacted      = 'contacted',
+  Interested     = 'interested',
+  VisitPlanned   = 'visit_planned',
+  QuotationSent  = 'quotation_sent',
+  Negotiation    = 'negotiation',
+  OrderConfirmed = 'order_confirmed',
+  Delivered      = 'delivered',
+  RepeatCustomer = 'repeat_customer',
+  Lost           = 'lost',
+}
+
 export enum EnquiryPriority {
   Low    = 'low',
   Medium = 'medium',
@@ -54,6 +72,24 @@ export enum EnquiryCategory {
 export enum AssignmentType {
   Auto   = 'auto',
   Manual = 'manual',
+}
+
+// ── Field visit tracking ────────────────────────────────────────────────────
+
+export enum VisitType {
+  PoultryFarmVisit  = 'poultry_farm_visit',
+  HotelVisit        = 'hotel_visit',
+  RestaurantVisit   = 'restaurant_visit',
+  DealerVisit       = 'dealer_visit',
+  DistributorVisit  = 'distributor_visit',
+}
+
+export const VISIT_TYPE_LABELS: Record<VisitType, string> = {
+  [VisitType.PoultryFarmVisit]: 'Poultry Farm Visit',
+  [VisitType.HotelVisit]:       'Hotel Visit',
+  [VisitType.RestaurantVisit]:  'Restaurant Visit',
+  [VisitType.DealerVisit]:      'Dealer Visit',
+  [VisitType.DistributorVisit]: 'Distributor Visit',
 }
 
 export enum FollowUpType {
@@ -121,6 +157,9 @@ export enum ActivityAction {
   EnquiryCancelled  = 'enquiry.cancelled',
   StatusChanged     = 'enquiry.status_changed',
   PriorityChanged   = 'enquiry.priority_changed',
+  LeadStageChanged  = 'enquiry.lead_stage_changed',
+  // Field visit actions
+  FieldVisitLogged  = 'field_visit.logged',
   // Follow-up actions
   FollowUpCreated   = 'followup.created',
   FollowUpCompleted = 'followup.completed',
@@ -144,11 +183,12 @@ export enum ActivityAction {
 }
 
 export enum EntityType {
-  Enquiry   = 'enquiry',
-  FollowUp  = 'followup',
-  User      = 'user',
+  Enquiry    = 'enquiry',
+  FollowUp   = 'followup',
+  User       = 'user',
   Assignment = 'assignment',
   Session    = 'session',
+  FieldVisit = 'field_visit',
 }
 
 export enum NotificationType {
@@ -195,6 +235,57 @@ export const ENQUIRY_PRIORITY_LABELS: Record<EnquiryPriority, string> = {
   [EnquiryPriority.Medium]: 'Medium',
   [EnquiryPriority.High]:   'High',
   [EnquiryPriority.Urgent]: 'Urgent',
+}
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
+  [LeadStage.NewLead]:        'New Lead',
+  [LeadStage.Assigned]:       'Assigned',
+  [LeadStage.Contacted]:      'Contacted',
+  [LeadStage.Interested]:     'Interested',
+  [LeadStage.VisitPlanned]:   'Visit Planned',
+  [LeadStage.QuotationSent]:  'Quotation Sent',
+  [LeadStage.Negotiation]:    'Negotiation',
+  [LeadStage.OrderConfirmed]: 'Order Confirmed',
+  [LeadStage.Delivered]:      'Delivered',
+  [LeadStage.RepeatCustomer]: 'Repeat Customer',
+  [LeadStage.Lost]:           'Lost',
+}
+
+// Display order for the stage tracker and the conversion funnel report.
+// `Lost` is deliberately excluded — it's an off-ramp reachable from any stage,
+// not a step in the linear sequence, and is rendered separately.
+export const LEAD_STAGE_ORDER: LeadStage[] = [
+  LeadStage.NewLead,
+  LeadStage.Assigned,
+  LeadStage.Contacted,
+  LeadStage.Interested,
+  LeadStage.VisitPlanned,
+  LeadStage.QuotationSent,
+  LeadStage.Negotiation,
+  LeadStage.OrderConfirmed,
+  LeadStage.Delivered,
+  LeadStage.RepeatCustomer,
+]
+
+// Stages counted as a successful conversion for the funnel's conversion-rate metric.
+export const LEAD_STAGE_CONVERTED: LeadStage[] = [
+  LeadStage.OrderConfirmed,
+  LeadStage.Delivered,
+  LeadStage.RepeatCustomer,
+]
+
+export const LEAD_STAGE_COLORS: Record<LeadStage, string> = {
+  [LeadStage.NewLead]:        '#94a3b8', // slate
+  [LeadStage.Assigned]:       '#6366f1', // indigo
+  [LeadStage.Contacted]:      '#3b82f6', // blue
+  [LeadStage.Interested]:     '#0ea5e9', // sky
+  [LeadStage.VisitPlanned]:   '#06b6d4', // cyan
+  [LeadStage.QuotationSent]:  '#8b5cf6', // violet
+  [LeadStage.Negotiation]:    '#f59e0b', // amber
+  [LeadStage.OrderConfirmed]: '#10b981', // emerald
+  [LeadStage.Delivered]:      '#14b8a6', // teal
+  [LeadStage.RepeatCustomer]: '#22c55e', // green
+  [LeadStage.Lost]:           '#ef4444', // red
 }
 
 export const ENQUIRY_SOURCE_LABELS: Record<EnquirySource, string> = {

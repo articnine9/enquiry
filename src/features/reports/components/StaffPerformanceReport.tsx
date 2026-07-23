@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Users, CheckCircle2, Phone, CalendarCheck, Clock, TrendingUp } from 'lucide-react'
+import { useSession } from 'next-auth/react'
+import { Users, CheckCircle2, Phone, CalendarCheck, Clock, TrendingUp, Target, IndianRupee } from 'lucide-react'
 import { useReportStore, useReportFilters, useStaffReport } from '@/store/report.store'
 import { getStaffPerformanceReportAction } from '../actions/report.actions'
 import ReportFilters from './ReportFilters'
 import { exportStaffPerformance } from '../utils/csv-export'
 import { cn } from '@/lib/utils'
+import { UserRole } from '@/types/enums'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +73,7 @@ function StaffTable() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100 dark:border-slate-800">
-            {['Staff', 'Zone', 'Days Active', 'Assigned', 'Resolved', 'Rate', 'Calls', 'Follow-ups', 'Online', 'Score'].map((h) => (
+            {['Staff', 'Zone', 'Days Active', 'Assigned', 'Resolved', 'Rate', 'Calls', 'Follow-ups', 'Online', 'Score', 'Leads', 'Converted', 'Lead Conv.', 'Revenue'].map((h) => (
               <th key={h} className="text-left text-xs font-semibold text-slate-500 dark:text-slate-400 pb-2.5 pr-4 whitespace-nowrap">
                 {h}
               </th>
@@ -126,6 +128,16 @@ function StaffTable() {
                     </span>
                   </div>
                 </td>
+                <td className="py-3 pr-4 text-xs tabular-nums text-slate-700 dark:text-slate-300">{r.leadsAssigned}</td>
+                <td className="py-3 pr-4 text-xs tabular-nums text-green-600 dark:text-green-400">{r.leadsConverted}</td>
+                <td className="py-3 pr-4 text-xs">
+                  <span className={cn('font-semibold tabular-nums', rateColor(r.leadConversionRate))}>
+                    {r.leadConversionRate}%
+                  </span>
+                </td>
+                <td className="py-3 pr-4 text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                  {r.revenueGenerated > 0 ? `₹${r.revenueGenerated.toLocaleString()}` : '—'}
+                </td>
               </tr>
             )
           })}
@@ -143,6 +155,8 @@ export default function StaffPerformanceReport() {
   const data      = useStaffReport()
   const isLoading = loading['staff'] === 'loading' || loading['staff'] === 'idle'
   const error     = useReportStore((s) => s.error['staff'])
+  const { data: session } = useSession()
+  const isStaff   = session?.user?.role === UserRole.Staff
 
   function runReport() {
     setLoading('staff', 'loading')
@@ -164,10 +178,10 @@ export default function StaffPerformanceReport() {
       <ReportFilters
         onRefresh={runReport}
         onExport={handleExport}
-        showExport={!!data?.rows?.length}
+        showExport={!isStaff && !!data?.rows?.length}
         loading={isLoading}
-        showZone
-        showStaff
+        showZone={!isStaff}
+        showStaff={!isStaff}
       />
 
       {error && (
@@ -182,8 +196,10 @@ export default function StaffPerformanceReport() {
         <>
           {/* Team KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <TeamKpiCard label="Team Members"   value={data.rows.length}
-              icon={Users}        color="text-indigo-600 dark:text-indigo-400" bg="bg-indigo-50 dark:bg-indigo-900/30" />
+            {!isStaff && (
+              <TeamKpiCard label="Team Members"   value={data.rows.length}
+                icon={Users}        color="text-indigo-600 dark:text-indigo-400" bg="bg-indigo-50 dark:bg-indigo-900/30" />
+            )}
             <TeamKpiCard label="Total Assigned" value={data.totals.enquiriesAssigned}
               icon={Users}        color="text-blue-600 dark:text-blue-400"    bg="bg-blue-50 dark:bg-blue-900/30" />
             <TeamKpiCard label="Total Resolved" value={data.totals.enquiriesResolved}
@@ -194,15 +210,25 @@ export default function StaffPerformanceReport() {
               icon={CalendarCheck} color="text-purple-600 dark:text-purple-400" bg="bg-purple-50 dark:bg-purple-900/30" />
             <TeamKpiCard label="Avg Team Score" value={data.totals.avgTeamScore}
               icon={TrendingUp}   color="text-teal-600 dark:text-teal-400"    bg="bg-teal-50 dark:bg-teal-900/30" />
+            <TeamKpiCard label="Leads Assigned" value={data.totals.leadsAssigned}
+              icon={Target}       color="text-sky-600 dark:text-sky-400"      bg="bg-sky-50 dark:bg-sky-900/30" />
+            <TeamKpiCard label="Leads Converted" value={data.totals.leadsConverted}
+              icon={CheckCircle2} color="text-lime-600 dark:text-lime-400"    bg="bg-lime-50 dark:bg-lime-900/30" />
+            <TeamKpiCard
+              label="Revenue Generated"
+              value={data.totals.revenueGenerated > 0 ? `₹${data.totals.revenueGenerated.toLocaleString()}` : '—'}
+              icon={IndianRupee}  color="text-amber-600 dark:text-amber-400"  bg="bg-amber-50 dark:bg-amber-900/30" />
           </div>
 
           {/* Staff performance table */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">
-              Individual Performance
-            </h3>
-            <StaffTable />
-          </div>
+          {!isStaff && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">
+                Individual Performance
+              </h3>
+              <StaffTable />
+            </div>
+          )}
         </>
       )}
     </div>

@@ -1,9 +1,13 @@
 import { notFound } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Truck } from 'lucide-react'
+import Link from 'next/link'
+import { Truck, Footprints, MapPin, Camera } from 'lucide-react'
 import { requireRole } from '@/lib/auth/session'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getDistributorAction } from '@/features/distributors/actions/distributor.actions'
+import { getFieldVisitsAction } from '@/features/field-visits/actions/fieldVisit.actions'
+import VisitTypeBadge from '@/features/field-visits/components/VisitTypeBadge'
+import { formatDate } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
@@ -29,6 +33,9 @@ export default async function DistributorDetailPage({ params }: PageProps) {
   const result = await getDistributorAction(id)
   if (!result.ok) notFound()
   const distributor = result.data
+
+  const visitsResult = await getFieldVisitsAction({ distributorId: id, pageSize: 5 })
+  const recentVisits = visitsResult.ok ? visitsResult.data.data : []
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-6">
@@ -68,6 +75,44 @@ export default async function DistributorDetailPage({ params }: PageProps) {
       <div>
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Dealers</h2>
         <DealerManager distributorId={distributor._id} distributorDistricts={distributor.assignedDistricts} />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <Footprints className="w-4 h-4 text-slate-400" />
+            Recent Visits
+          </h2>
+          <Link
+            href={`/field-visits?distributorId=${distributor._id}`}
+            className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            View all
+          </Link>
+        </div>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          {recentVisits.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 text-sm">No field visits logged for this distributor yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {recentVisits.map((v) => (
+                <li key={v._id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/field-visits/${v._id}`} className="text-sm font-medium text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate">
+                      {v.customerName}
+                    </Link>
+                    <p className="text-xs text-slate-400">{v.staffName ?? 'Staff'} · {formatDate(v.visitDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {v.gpsLat != null && <MapPin className="w-3.5 h-3.5 text-slate-400" />}
+                    {v.photoUrl && <Camera className="w-3.5 h-3.5 text-slate-400" />}
+                    <VisitTypeBadge type={v.visitType} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1,15 +1,18 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Pencil, UserCheck } from 'lucide-react'
+import { ChevronLeft, Pencil, UserCheck, Repeat } from 'lucide-react'
 import { auth } from '@/lib/auth/auth'
 import { getEnquiryById } from '@/features/enquiries/actions/enquiry.actions'
 import { StatusBadge } from '@/features/enquiries/components/StatusBadge'
 import { PriorityBadge } from '@/features/enquiries/components/PriorityBadge'
 import { SlaBadge } from '@/features/enquiries/components/SlaBadge'
+import { LeadStageTracker } from '@/features/enquiries/components/LeadStageTracker'
+import { LeadStageBadge } from '@/features/enquiries/components/LeadStageBadge'
 import EnquiryDetailActions from '@/features/enquiries/components/EnquiryDetailActions'
 import FollowUpSection from '@/features/followups/components/FollowUpSection'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { labelFor, resolveMasterValue } from '@/features/settings/services/masterData.service'
+import { getCustomerByPhoneAction } from '@/features/customers/actions/customer.actions'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
@@ -50,6 +53,9 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
   ])
   const priorityRow = await resolveMasterValue('enquiry_priority', enquiry.priority)
 
+  const customerLookup  = await getCustomerByPhoneAction(enquiry.phone)
+  const existingCustomer = customerLookup.ok ? customerLookup.data : null
+
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
       {/* Breadcrumb */}
@@ -77,6 +83,7 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
               color={priorityRow?.color}
               label={priorityRow?.label}
             />
+            <LeadStageBadge stage={enquiry.leadStage} />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
             {enquiry.subject || enquiry.customerName}
@@ -112,6 +119,16 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
               <DetailField label="Address" value={[enquiry.address, enquiry.city, enquiry.district, enquiry.pincode].filter(Boolean).join(', ')} />
               <DetailField label="Location" value={enquiry.location} />
             </dl>
+          </DetailCard>
+
+          {/* Lead stage */}
+          <DetailCard title="Lead Stage">
+            <LeadStageTracker
+              enquiryId={String(enquiry._id)}
+              stage={enquiry.leadStage}
+              isConverted={!!enquiry.convertedAt}
+              canEdit={!isCancelled && (!isStaff || String((enquiry.assignedTo as unknown as { _id?: string })?._id ?? enquiry.assignedTo) === session?.user?.id)}
+            />
           </DetailCard>
 
           {/* Follow-ups */}
@@ -159,6 +176,26 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
 
         {/* Sidebar */}
         <div className="space-y-4">
+          {/* Existing customer — repeat-business context */}
+          {existingCustomer && (
+            <DetailCard title="Customer History">
+              <Link href={`/customers/${existingCustomer._id}`} className="block group">
+                <div className="flex items-center gap-2 mb-1.5">
+                  {existingCustomer.totalPurchases > 1 && (
+                    <Repeat className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  )}
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    {existingCustomer.totalPurchases > 1 ? 'Repeat customer' : 'Existing customer'}
+                  </p>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {existingCustomer.totalPurchases} past purchase{existingCustomer.totalPurchases === 1 ? '' : 's'}
+                  {existingCustomer.lastPurchaseAt && ` · last ${formatDate(existingCustomer.lastPurchaseAt)}`}
+                </p>
+              </Link>
+            </DetailCard>
+          )}
+
           {/* SLA */}
           <DetailCard title="SLA">
             <div className="space-y-3">

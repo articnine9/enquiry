@@ -7,8 +7,9 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useEnquiryStore } from '@/store/enquiry.store'
 import { cn } from '@/lib/utils'
 import {
-  EnquiryStatus, EnquiryPriority, EnquirySource, EnquiryProduct,
+  EnquiryStatus, EnquiryPriority, EnquirySource, EnquiryProduct, LeadStage,
   ENQUIRY_STATUS_LABELS, ENQUIRY_PRIORITY_LABELS, ENQUIRY_SOURCE_LABELS, ENQUIRY_PRODUCT_LABELS,
+  LEAD_STAGE_LABELS, LEAD_STAGE_ORDER,
 } from '@/types/enums'
 import type { MasterOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryFilterInput } from '../validations/enquiry.schema'
@@ -20,6 +21,9 @@ import { getDealersByDistributorAction } from '@/features/distributors/actions/d
 const FALLBACK_PRIORITY = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
 const FALLBACK_SOURCE   = Object.values(EnquirySource).map((v) => ({ value: v, label: ENQUIRY_SOURCE_LABELS[v] }))
 const FALLBACK_PRODUCT  = Object.values(EnquiryProduct).map((v) => ({ value: v, label: ENQUIRY_PRODUCT_LABELS[v] }))
+
+const LEAD_STAGE_OPTIONS = [...LEAD_STAGE_ORDER, LeadStage.Lost]
+  .map((s) => ({ value: s, label: LEAD_STAGE_LABELS[s] }))
 
 const SLA_FILTER_OPTIONS = [
   { value: 'breached', label: 'Breached' },
@@ -106,7 +110,7 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
   }
 
   const hasActiveFilters =
-    !!(filters.status || filters.priority || filters.enquirySource ||
+    !!(filters.status || filters.leadStage || filters.priority || filters.enquirySource ||
        filters.product || filters.city || filters.search || filters.slaStatus ||
        filters.distributorId || filters.dealerId)
 
@@ -161,6 +165,14 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
           options={Object.values(EnquiryStatus).map((v) => ({
             value: v, label: ENQUIRY_STATUS_LABELS[v],
           }))}
+        />
+
+        <FilterSelect
+          id="leadStage"
+          placeholder="All Lead Stages"
+          value={filters.leadStage ?? ''}
+          onChange={(v) => handleFilter('leadStage', v as LeadStage)}
+          options={LEAD_STAGE_OPTIONS}
         />
 
         <FilterSelect

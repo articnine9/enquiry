@@ -26,6 +26,8 @@ const PERMISSIONS: Record<UserRole, Set<string>> = {
     'report:export',
     'notification:read',
     'notification:update',
+    'visit:read',
+    'visit:create',
   ]),
 
   [UserRole.Staff]: new Set([
@@ -38,6 +40,8 @@ const PERMISSIONS: Record<UserRole, Set<string>> = {
     'report:read',
     'notification:read',
     'notification:update',
+    'visit:read',
+    'visit:create',
   ]),
 }
 
