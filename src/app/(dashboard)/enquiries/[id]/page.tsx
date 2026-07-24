@@ -6,6 +6,8 @@ import { getEnquiryById } from '@/features/enquiries/actions/enquiry.actions'
 import { StatusBadge } from '@/features/enquiries/components/StatusBadge'
 import { PriorityBadge } from '@/features/enquiries/components/PriorityBadge'
 import { SlaBadge } from '@/features/enquiries/components/SlaBadge'
+import { EscalationBadge } from '@/features/enquiries/components/EscalationBadge'
+import { getEscalationTier } from '@/lib/escalation'
 import { LeadStageTracker } from '@/features/enquiries/components/LeadStageTracker'
 import { LeadStageBadge } from '@/features/enquiries/components/LeadStageBadge'
 import EnquiryDetailActions from '@/features/enquiries/components/EnquiryDetailActions'
@@ -46,10 +48,12 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
   const dealer         = enquiry.dealerId as unknown as { name: string } | null
 
   // Resolve master-data labels for display
-  const [sourceLabel, productLabel, categoryLabel] = await Promise.all([
+  const [sourceLabel, productLabel, categoryLabel, businessCategoryLabel, businessSubCategoryLabel] = await Promise.all([
     labelFor('enquiry_source',   enquiry.enquirySource),
     labelFor('enquiry_product',  enquiry.product),
     labelFor('enquiry_category', enquiry.category),
+    labelFor('business_category',    enquiry.businessCategory),
+    labelFor('business_subcategory', enquiry.businessSubCategory),
   ])
   const priorityRow = await resolveMasterValue('enquiry_priority', enquiry.priority)
 
@@ -144,6 +148,8 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
               <DetailField label="Source"   value={sourceLabel} />
               <DetailField label="Product"  value={productLabel} />
               <DetailField label="Category" value={categoryLabel} />
+              <DetailField label="Business Category" value={businessCategoryLabel} />
+              <DetailField label="Sub-Category"      value={businessSubCategoryLabel} />
             </dl>
             {enquiry.description && (
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -212,6 +218,22 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
                   Due {formatDateTime(enquiry.slaDueAt)}
                 </p>
               )}
+            </div>
+          </DetailCard>
+
+          {/* Escalation */}
+          <DetailCard title="Escalation">
+            <div className="space-y-3">
+              <EscalationBadge
+                lastActionAt={enquiry.lastActionAt}
+                assignedTo={enquiry.assignedTo}
+                status={enquiry.status}
+                leadStage={enquiry.leadStage}
+                showElapsed
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                24h no action → reminder · 48h → escalated · 72h → reassignment available
+              </p>
             </div>
           </DetailCard>
 

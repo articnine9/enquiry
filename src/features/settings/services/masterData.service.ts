@@ -11,8 +11,13 @@ export interface MasterOption {
   weight?: number
 }
 
+export interface MasterSubOption extends MasterOption {
+  parentCode: string
+}
+
 interface MasterRow extends MasterOption {
-  isActive: boolean
+  isActive:    boolean
+  parentCode?: string
 }
 
 // ─── Per-request fetch of every row for a type (active + inactive) ────────────
@@ -30,11 +35,12 @@ const allCached = cache(async (type: MasterDataType): Promise<MasterRow[]> => {
     .sort({ sortOrder: 1, label: 1 })
     .lean()
   return rows.map((r) => ({
-    value:    r.code,
-    label:    r.label,
-    color:    r.color,
-    weight:   r.weight,
-    isActive: r.isActive,
+    value:      r.code,
+    label:      r.label,
+    color:      r.color,
+    weight:     r.weight,
+    isActive:   r.isActive,
+    parentCode: r.parentCode,
   }))
 })
 
@@ -48,20 +54,32 @@ export async function getMasterOptions(type: MasterDataType): Promise<MasterOpti
     .map(({ value, label, color, weight }) => ({ value, label, color, weight }))
 }
 
+/** Active sub-options for a type, each tagged with its parent's code. */
+export async function getMasterSubOptions(type: MasterDataType): Promise<MasterSubOption[]> {
+  const rows = await allCached(type)
+  return rows
+    .filter((r) => r.isActive && r.parentCode)
+    .map(({ value, label, color, weight, parentCode }) => ({ value, label, color, weight, parentCode: parentCode! }))
+}
+
 /** All active option sets for the enquiry form, in one round of caching. */
 export async function getEnquiryFormOptions(): Promise<{
-  sources:    MasterOption[]
-  categories: MasterOption[]
-  products:   MasterOption[]
-  priorities: MasterOption[]
+  sources:            MasterOption[]
+  categories:         MasterOption[]
+  products:           MasterOption[]
+  priorities:         MasterOption[]
+  businessCategories: MasterOption[]
+  businessSubCategories: MasterSubOption[]
 }> {
-  const [sources, categories, products, priorities] = await Promise.all([
+  const [sources, categories, products, priorities, businessCategories, businessSubCategories] = await Promise.all([
     getMasterOptions('enquiry_source'),
     getMasterOptions('enquiry_category'),
     getMasterOptions('enquiry_product'),
     getMasterOptions('enquiry_priority'),
+    getMasterOptions('business_category'),
+    getMasterSubOptions('business_subcategory'),
   ])
-  return { sources, categories, products, priorities }
+  return { sources, categories, products, priorities, businessCategories, businessSubCategories }
 }
 
 /** code → label map (includes inactive) for rendering stored enquiry values. */

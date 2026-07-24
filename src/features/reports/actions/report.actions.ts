@@ -32,10 +32,12 @@ import {
   buildFollowUpReportPipeline,
   buildConversionFunnelPipeline,
   buildMarketingReportPipeline,
+  buildBusinessCategoryReportPipeline,
   buildDealerPerformancePipeline,
   buildDistributorPerformancePipeline,
 } from '../aggregations/report.pipelines'
 import { resolveDateRange } from '../utils/date-range'
+import { getMasterLabelMap } from '@/features/settings/services/masterData.service'
 
 function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -306,11 +308,22 @@ export async function getMarketingReportAction(
     await dbConnect()
 
     const filters  = { ...rawFilters, ...resolveDateRange(rawFilters) }
-    const bySource = await Enquiry.aggregate(buildMarketingReportPipeline(filters))
+    const [bySource, byCategoryRaw, categoryLabels, subCategoryLabels] = await Promise.all([
+      Enquiry.aggregate(buildMarketingReportPipeline(filters)),
+      Enquiry.aggregate(buildBusinessCategoryReportPipeline(filters)),
+      getMasterLabelMap('business_category'),
+      getMasterLabelMap('business_subcategory'),
+    ])
 
     const totalLeads = bySource.reduce((s: number, r: { leads: number }) => s + r.leads, 0)
 
-    return { ok: true, data: toPlain({ totalLeads, bySource }) }
+    const byBusinessCategory = byCategoryRaw.map((r: { category: string; subCategory: string; leads: number; converted: number; conversionRate: number }) => ({
+      ...r,
+      categoryLabel:    categoryLabels[r.category] ?? r.category,
+      subCategoryLabel: subCategoryLabels[r.subCategory] ?? r.subCategory,
+    }))
+
+    return { ok: true, data: toPlain({ totalLeads, bySource, byBusinessCategory }) }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to load report' }
   }

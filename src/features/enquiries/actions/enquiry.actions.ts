@@ -6,12 +6,13 @@ import type { FilterQuery } from 'mongoose'
 import dbConnect from '@/lib/db/connection'
 import Enquiry, { type EnquiryDocument } from '@/lib/db/models/Enquiry'
 import { ActivityLog, Assignment, User } from '@/lib/db/models'
-import { requireSession, requirePermission, authErrorToResult } from '@/lib/auth/session'
-import { autoAssign } from '@/features/assignments/services/assignment.service'
+import { requireSession, requirePermission, requireRole, authErrorToResult } from '@/lib/auth/session'
+import { autoAssign, reassign } from '@/features/assignments/services/assignment.service'
 import { resolveMasterValue } from '@/features/settings/services/masterData.service'
 import { resolveSlaPolicy } from '@/features/settings/services/slaPolicy.service'
 import { resolveChannelByArea } from '@/features/distributors/services/distributor-matcher.service'
 import { convertEnquiryToCustomer } from '@/features/customers/services/customer-conversion.service'
+import { checkAndNotifyEscalations, type EscalationCandidate } from '../services/escalation-notifier.service'
 import { computeSlaDueAt, SLA_AT_RISK_RATIO } from '@/lib/sla'
 import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
@@ -21,6 +22,7 @@ import {
   UpdateStatusSchema,
   EnquiryFilterSchema,
   AssignEnquirySchema,
+  ReassignEnquirySchema,
 } from '../validations/enquiry.schema'
 import {
   ActivityAction,
@@ -41,24 +43,53 @@ function toPlain<T>(doc: T): T {
   return JSON.parse(JSON.stringify(doc))
 }
 
+// ── Escalation sweep (lazy — no cron exists, so this piggybacks on reads) ──────
+
+function toEscalationCandidate(
+  enquiry: { _id: unknown; enquiryNo: string; customerName: string; status: string; leadStage?: string; lastActionAt?: Date | null; escalationNotifiedTier?: string | null },
+  assignedToId: unknown
+): EscalationCandidate {
+  return {
+    _id:          enquiry._id,
+    enquiryNo:    enquiry.enquiryNo,
+    customerName: enquiry.customerName,
+    assignedTo:   assignedToId,
+    status:       enquiry.status,
+    leadStage:    enquiry.leadStage,
+    lastActionAt: enquiry.lastActionAt,
+    escalationNotifiedTier: enquiry.escalationNotifiedTier,
+  }
+}
+
+// Fire-and-forget — never blocks or fails the page render that triggered it.
+function queueEscalationCheck(candidates: EscalationCandidate[]): void {
+  if (candidates.length === 0) return
+  checkAndNotifyEscalations(candidates).catch((err) => console.error('Escalation sweep failed:', err))
+}
+
 // Verify each supplied dropdown value exists & is active in MasterData, and
 // derive the priority sort weight. Only fields present in `data` are checked
 // (so partial updates skip untouched fields).
-const MASTER_FIELDS: { key: 'enquirySource' | 'category' | 'product' | 'priority'; type: MasterDataType; label: string }[] = [
-  { key: 'enquirySource', type: 'enquiry_source',   label: 'enquiry source' },
-  { key: 'category',      type: 'enquiry_category', label: 'category' },
-  { key: 'product',       type: 'enquiry_product',  label: 'product' },
-  { key: 'priority',      type: 'enquiry_priority', label: 'priority' },
+type MasterFieldKey = 'enquirySource' | 'category' | 'product' | 'priority' | 'businessCategory' | 'businessSubCategory'
+
+const MASTER_FIELDS: { key: MasterFieldKey; type: MasterDataType; label: string }[] = [
+  { key: 'enquirySource',        type: 'enquiry_source',        label: 'enquiry source' },
+  { key: 'category',             type: 'enquiry_category',      label: 'category' },
+  { key: 'product',              type: 'enquiry_product',       label: 'product' },
+  { key: 'priority',             type: 'enquiry_priority',      label: 'priority' },
+  { key: 'businessCategory',     type: 'business_category',     label: 'business category' },
+  { key: 'businessSubCategory',  type: 'business_subcategory',  label: 'business sub-category' },
 ]
 
 async function validateMasterFields(
-  data: Partial<Record<'enquirySource' | 'category' | 'product' | 'priority', string>>
+  data: Partial<Record<MasterFieldKey, string>>
 ): Promise<
   | { ok: true; priorityWeight?: number }
   | { ok: false; fieldErrors: Record<string, string[]> }
 > {
   const fieldErrors: Record<string, string[]> = {}
   let priorityWeight: number | undefined
+  let subCategoryRow: Awaited<ReturnType<typeof resolveMasterValue>> = null
 
   for (const f of MASTER_FIELDS) {
     const code = data[f.key]
@@ -69,6 +100,12 @@ async function validateMasterFields(
       continue
     }
     if (f.key === 'priority') priorityWeight = row.weight ?? 2
+    if (f.key === 'businessSubCategory') subCategoryRow = row
+  }
+
+  // A sub-category must actually belong to the chosen category.
+  if (data.businessCategory && subCategoryRow && subCategoryRow.parentCode !== data.businessCategory) {
+    fieldErrors.businessSubCategory = ['Sub-category does not belong to the selected business category']
   }
 
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors }
@@ -224,6 +261,9 @@ export async function updateEnquiry(
       update.dealerId      = channel.dealerId ?? null
     }
 
+    update.lastActionAt = new Date()
+    update.escalationNotifiedTier = null
+
     const enquiry = await Enquiry.findByIdAndUpdate(
       id,
       { $set: update },
@@ -314,6 +354,8 @@ export async function updateEnquiryStatus(
 
     const prevStatus = enquiry.status
     enquiry.status   = parsed.data.status as EnquiryStatus
+    enquiry.lastActionAt = new Date()
+    enquiry.escalationNotifiedTier = null
 
     // FSM guard is enforced in the pre-save hook
     await enquiry.save()
@@ -363,7 +405,7 @@ export async function updateLeadStageAction(
 
     await dbConnect()
     const before = await Enquiry.findById(id)
-      .select('leadStage assignedTo convertedAt customerName phone email address city district product category distributorId dealerId')
+      .select('leadStage assignedTo convertedAt customerName phone email address city district product category distributorId dealerId businessCategory businessSubCategory')
       .lean()
     if (!before) return { ok: false, error: 'Enquiry not found' }
 
@@ -381,7 +423,7 @@ export async function updateLeadStageAction(
     const isConverting =
       LEAD_STAGE_CONVERTED.includes(leadStage as LeadStage) && !before.convertedAt
 
-    const update: Record<string, unknown> = { leadStage }
+    const update: Record<string, unknown> = { leadStage, lastActionAt: now, escalationNotifiedTier: null }
     if (isConverting) {
       update.convertedAt = now
       if (dealValue != null) update.dealValue = dealValue
@@ -440,14 +482,19 @@ export async function getEnquiryById(
     if (session.user.role === UserRole.Staff) {
       const enquiry = await query.lean()
       if (!enquiry) return { ok: false, error: 'Enquiry not found' }
-      if (String(enquiry.assignedTo) !== session.user.id) {
+      const assignedToId = (enquiry.assignedTo as unknown as { _id?: unknown })?._id ?? enquiry.assignedTo
+      if (String(assignedToId) !== session.user.id) {
         return { ok: false, error: 'Enquiry not found' }
       }
+      queueEscalationCheck([toEscalationCandidate(enquiry, assignedToId)])
       return { ok: true, data: toPlain(enquiry) }
     }
 
     const enquiry = await query.lean()
     if (!enquiry) return { ok: false, error: 'Enquiry not found' }
+
+    const assignedToId = (enquiry.assignedTo as unknown as { _id?: unknown })?._id ?? enquiry.assignedTo
+    queueEscalationCheck([toEscalationCandidate(enquiry, assignedToId)])
 
     return { ok: true, data: toPlain(enquiry) }
   } catch (err) {
@@ -472,7 +519,7 @@ export async function getEnquiries(
 
     const {
       search, status, leadStage, priority, enquirySource, product,
-      category, assignedTo, city, district, distributorId, dealerId, slaStatus,
+      category, businessCategory, businessSubCategory, assignedTo, city, district, distributorId, dealerId, slaStatus,
       dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
     } = parsed.data
 
@@ -498,6 +545,8 @@ export async function getEnquiries(
     if (enquirySource) filter.enquirySource = enquirySource
     if (product)       filter.product       = product
     if (category)      filter.category      = category
+    if (businessCategory)    filter.businessCategory    = businessCategory
+    if (businessSubCategory) filter.businessSubCategory = businessSubCategory
     if (city)          filter.city          = { $regex: city, $options: 'i' }
     if (district)      filter.district      = { $regex: district, $options: 'i' }
     if (distributorId) filter.distributorId = distributorId
@@ -557,6 +606,10 @@ export async function getEnquiries(
       Enquiry.countDocuments(filter),
     ])
 
+    queueEscalationCheck(
+      data.map((e) => toEscalationCandidate(e, (e.assignedTo as unknown as { _id?: unknown })?._id ?? e.assignedTo))
+    )
+
     return {
       ok: true,
       data: {
@@ -613,6 +666,8 @@ export async function assignEnquiry(
       assignedBy: session.user.id,
       assignedAt: new Date(),
       status:     EnquiryStatus.Assigned,
+      lastActionAt: new Date(),
+      escalationNotifiedTier: null,
     })
 
     // Decrement previous staff load, increment new staff load
@@ -632,6 +687,48 @@ export async function assignEnquiry(
     revalidateTag(CACHE_TAGS.dashboard)
 
     return { ok: true, data: { assigned: true } }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REASSIGN  (escalation-driven — routes through the transaction-safe
+// assignment.service.ts reassign(), unlike assignEnquiry above which writes
+// directly. Reason is mandatory here, for the audit trail.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function reassignEnquiryAction(
+  _prev: ActionResult<{ reassigned: boolean }> | null,
+  formData: FormData
+): Promise<ActionResult<{ reassigned: boolean }>> {
+  try {
+    const session = await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+
+    const parsed = ReassignEnquirySchema.safeParse(Object.fromEntries(formData.entries()))
+    if (!parsed.success) {
+      return {
+        ok:          false,
+        error:       'Invalid reassignment data',
+        fieldErrors: parsed.error.flatten().fieldErrors,
+      }
+    }
+
+    const result = await reassign({
+      enquiryId: parsed.data.enquiryId,
+      staffId:   parsed.data.staffId,
+      actorId:   session.user.id,
+      actorRole: session.user.role,
+      reason:    parsed.data.reason,
+    })
+    if (!result.ok) return { ok: false, error: result.error }
+
+    revalidateTag(CACHE_TAGS.enquiries)
+    revalidateTag(CACHE_TAGS.enquiry(parsed.data.enquiryId))
+    revalidateTag(CACHE_TAGS.assignments)
+    revalidateTag(CACHE_TAGS.dashboard)
+
+    return { ok: true, data: { reassigned: true } }
   } catch (err) {
     return authErrorToResult(err)
   }

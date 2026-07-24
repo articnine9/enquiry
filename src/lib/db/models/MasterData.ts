@@ -23,6 +23,7 @@ export interface IMasterData {
   label:     string        // display text, e.g. 'Product A'
   color?:    string        // badge colour token (priority only), e.g. 'amber'
   weight?:   number        // semantic rank for sorting (priority only)
+  parentCode?: string      // code of the parent-type row (business_subcategory → business_category)
   sortOrder: number        // display order within its type
   isActive:  boolean       // hidden from new-enquiry dropdowns when false
   isSystem:  boolean        // seeded default — protected from deletion
@@ -60,6 +61,12 @@ const MasterDataSchema = new Schema<MasterDataDocument>(
     },
     color:  { type: String, trim: true },
     weight: { type: Number },
+    parentCode: {
+      type:      String,
+      trim:      true,
+      lowercase: true,
+      default:   undefined,
+    },
     sortOrder: { type: Number, default: 0 },
     isActive:  { type: Boolean, default: true },
     isSystem:  { type: Boolean, default: false },
@@ -76,6 +83,7 @@ const MasterDataSchema = new Schema<MasterDataDocument>(
 
 MasterDataSchema.index({ type: 1, code: 1 }, { unique: true })
 MasterDataSchema.index({ type: 1, isActive: 1, sortOrder: 1 })
+MasterDataSchema.index({ type: 1, parentCode: 1 })
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 

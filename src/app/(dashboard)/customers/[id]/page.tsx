@@ -75,13 +75,24 @@ export default async function CustomerDetailPage({ params }: PageProps) {
               <p className="text-sm text-slate-700 dark:text-slate-300">{customer.address}</p>
             </div>
           )}
-          <div className="col-span-2 sm:col-span-4">
+          <div className="col-span-2 sm:col-span-2">
             <p className="text-xs font-medium text-slate-400 mb-1">Product Categories</p>
             <div className="flex flex-wrap gap-1.5">
               {customer.productCategories.length === 0
                 ? <span className="text-sm text-slate-400">None</span>
                 : customer.productCategories.map((cat) => (
                     <span key={cat} className="px-2 py-0.5 rounded-full text-[11px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">{cat}</span>
+                  ))
+              }
+            </div>
+          </div>
+          <div className="col-span-2 sm:col-span-2">
+            <p className="text-xs font-medium text-slate-400 mb-1">Business Segments</p>
+            <div className="flex flex-wrap gap-1.5">
+              {customer.businessCategories.length === 0
+                ? <span className="text-sm text-slate-400">Unclassified</span>
+                : customer.businessCategories.map((cat) => (
+                    <span key={cat} className="px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 capitalize">{cat}</span>
                   ))
               }
             </div>

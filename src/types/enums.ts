@@ -199,6 +199,8 @@ export enum NotificationType {
   EnquiryResolved  = 'enquiry_resolved',
   MentionedInNote  = 'mentioned_in_note',
   SystemAlert      = 'system_alert',
+  LeadReminder     = 'lead_reminder',   // 24h no action — sent to assigned staff
+  LeadEscalated    = 'lead_escalated',  // 48h no action — broadcast to Manager+SuperAdmin
 }
 
 export enum NotificationChannel {

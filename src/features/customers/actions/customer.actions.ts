@@ -22,6 +22,7 @@ export interface CustomerRow {
   distributorName?:  string
   dealerName?:       string
   productCategories: string[]
+  businessCategories: string[]
   totalPurchases:    number
   totalRevenue:      number
   lastPurchaseAt:    string
@@ -92,7 +93,8 @@ export async function getCustomersAction(
       territory:         c.territory,
       distributorName:   (c.distributorId as unknown as { name?: string } | null)?.name,
       dealerName:        (c.dealerId as unknown as { name?: string } | null)?.name,
-      productCategories: c.productCategories ?? [],
+      productCategories:  c.productCategories ?? [],
+      businessCategories: c.businessCategories ?? [],
       totalPurchases:    c.totalPurchases,
       totalRevenue:      c.totalRevenue ?? 0,
       lastPurchaseAt:    String(c.lastPurchaseAt),
@@ -143,6 +145,7 @@ export async function getCustomerAction(id: string): Promise<ActionResult<Custom
         distributorName:   (c.distributorId as unknown as { name?: string } | null)?.name,
         dealerName:        (c.dealerId as unknown as { name?: string } | null)?.name,
         productCategories: c.productCategories ?? [],
+        businessCategories: c.businessCategories ?? [],
         totalPurchases:    c.totalPurchases,
         totalRevenue:      c.totalRevenue ?? 0,
         firstConvertedAt:  String(c.firstConvertedAt),
@@ -192,6 +195,7 @@ export async function getCustomerByPhoneAction(
         distributorName:   (c.distributorId as unknown as { name?: string } | null)?.name,
         dealerName:        (c.dealerId as unknown as { name?: string } | null)?.name,
         productCategories: c.productCategories ?? [],
+        businessCategories: c.businessCategories ?? [],
         totalPurchases:    c.totalPurchases,
         totalRevenue:      c.totalRevenue ?? 0,
         lastPurchaseAt:    String(c.lastPurchaseAt),

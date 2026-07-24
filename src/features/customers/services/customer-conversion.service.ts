@@ -16,6 +16,8 @@ export interface ConvertibleEnquiry {
   distributorId?: Types.ObjectId | string | null
   dealerId?:      Types.ObjectId | string | null
   dealValue?:     number | null
+  businessCategory?:    string | null
+  businessSubCategory?: string | null
 }
 
 /**
@@ -39,7 +41,9 @@ export async function convertEnquiryToCustomer(
     ? (await Distributor.findById(distributorId).select('territory').lean())?.territory
     : undefined
 
-  const dealValue = enquiry.dealValue ?? null
+  const dealValue         = enquiry.dealValue ?? null
+  const businessCategory  = enquiry.businessCategory ?? null
+  const businessSubCategory = enquiry.businessSubCategory ?? null
 
   const purchaseEntry = {
     enquiryId:    enquiry._id,
@@ -48,6 +52,8 @@ export async function convertEnquiryToCustomer(
     distributorId,
     dealerId,
     dealValue,
+    businessCategory,
+    businessSubCategory,
     convertedAt,
   }
 
@@ -57,20 +63,24 @@ export async function convertEnquiryToCustomer(
     const categories = new Set(existing.productCategories)
     categories.add(enquiry.category)
 
+    const businessCategories = new Set(existing.businessCategories)
+    if (businessCategory) businessCategories.add(businessCategory)
+
     await Customer.findByIdAndUpdate(existing._id, {
       $push: { purchaseHistory: purchaseEntry },
       $inc:  { totalPurchases: 1, totalRevenue: dealValue ?? 0 },
       $set: {
-        name:              enquiry.customerName,
-        email:             enquiry.email || existing.email,
-        address:           enquiry.address,
-        city:              enquiry.city,
-        district:          enquiry.district,
-        territory:         territory ?? existing.territory,
-        distributorId:     distributorId ?? existing.distributorId,
-        dealerId:          dealerId ?? existing.dealerId,
-        productCategories: [...categories],
-        lastPurchaseAt:    convertedAt,
+        name:               enquiry.customerName,
+        email:              enquiry.email || existing.email,
+        address:            enquiry.address,
+        city:               enquiry.city,
+        district:           enquiry.district,
+        territory:          territory ?? existing.territory,
+        distributorId:      distributorId ?? existing.distributorId,
+        dealerId:           dealerId ?? existing.dealerId,
+        productCategories:  [...categories],
+        businessCategories: [...businessCategories],
+        lastPurchaseAt:     convertedAt,
       },
     })
     return
@@ -86,7 +96,8 @@ export async function convertEnquiryToCustomer(
     territory:         territory ?? undefined,
     distributorId,
     dealerId,
-    productCategories: [enquiry.category],
+    productCategories:  [enquiry.category],
+    businessCategories: businessCategory ? [businessCategory] : [],
     totalPurchases:    1,
     totalRevenue:      dealValue ?? 0,
     firstConvertedAt:  convertedAt,

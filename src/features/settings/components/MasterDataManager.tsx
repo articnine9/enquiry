@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   MASTER_DATA_TYPES,
   MASTER_DATA_TYPE_LABELS,
+  MASTER_DATA_PARENT_TYPE,
   type MasterDataType,
 } from '../masterData.constants'
 import {
@@ -31,15 +32,23 @@ interface RowFormProps {
 function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const isPriority = type === 'enquiry_priority'
+  const isPriority  = type === 'enquiry_priority'
+  const parentType  = MASTER_DATA_PARENT_TYPE[type]
   const [form, setForm] = useState({
-    code:      row?.code      ?? '',
-    label:     row?.label     ?? '',
-    color:     row?.color     ?? 'slate',
-    weight:    row?.weight?.toString() ?? '',
-    sortOrder: row?.sortOrder?.toString() ?? '0',
-    isActive:  row?.isActive  ?? true,
+    code:       row?.code       ?? '',
+    label:      row?.label      ?? '',
+    color:      row?.color      ?? 'slate',
+    weight:     row?.weight?.toString() ?? '',
+    parentCode: row?.parentCode ?? '',
+    sortOrder:  row?.sortOrder?.toString() ?? '0',
+    isActive:   row?.isActive   ?? true,
   })
+
+  const [parentOptions, setParentOptions] = useState<MasterDataRow[]>([])
+  useEffect(() => {
+    if (!parentType) return
+    getMasterDataAction(parentType).then((r) => { if (r.ok) setParentOptions(r.data.filter((p) => p.isActive)) })
+  }, [parentType])
 
   function set(k: string, v: string | boolean) {
     setForm((p) => ({ ...p, [k]: v }))
@@ -56,6 +65,7 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
       sortOrder: Number(form.sortOrder) || 0,
       isActive:  form.isActive,
       ...(isPriority ? { color: form.color, weight: Number(form.weight) || 0 } : {}),
+      ...(parentType ? { parentCode: form.parentCode } : {}),
     }
 
     startTransition(async () => {
@@ -112,6 +122,16 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
               <p className="mt-1 text-[11px] text-slate-400">Lowercase letters, digits, underscores. Stored on each enquiry — avoid changing later.</p>
             </div>
 
+            {parentType && (
+              <div className="col-span-2">
+                <label className={LABEL}>Parent Category *</label>
+                <select required value={form.parentCode} onChange={(e) => set('parentCode', e.target.value)} className={INPUT}>
+                  <option value="">Select…</option>
+                  {parentOptions.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
+                </select>
+              </div>
+            )}
+
             {isPriority && (
               <>
                 <div>
@@ -162,6 +182,9 @@ export default function MasterDataManager() {
   const [isLoading, setIsLoading]   = useState(true)
   const [editing,   setEditing]     = useState<MasterDataRow | null | 'new'>(null)
   const [error,     setError]       = useState<string | null>(null)
+  const [parentLabels, setParentLabels] = useState<Record<string, string>>({})
+
+  const parentType = MASTER_DATA_PARENT_TYPE[activeType]
 
   async function reload() {
     setIsLoading(true)
@@ -173,6 +196,13 @@ export default function MasterDataManager() {
   }
 
   useEffect(() => { reload() }, [activeType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!parentType) { setParentLabels({}); return }
+    getMasterDataAction(parentType).then((r) => {
+      if (r.ok) setParentLabels(Object.fromEntries(r.data.map((p) => [p.code, p.label])))
+    })
+  }, [parentType])
 
   async function handleToggle(id: string, current: boolean) {
     await toggleMasterDataActiveAction(id, !current)
@@ -187,6 +217,7 @@ export default function MasterDataManager() {
   }
 
   const isPriority = activeType === 'enquiry_priority'
+  const colCount   = 5 + (isPriority || parentType ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -235,6 +266,7 @@ export default function MasterDataManager() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Label</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Code</th>
               {isPriority && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Colour / Weight</th>}
+              {parentType && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Parent Category</th>}
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Order</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
               <th className="w-24" />
@@ -244,7 +276,7 @@ export default function MasterDataManager() {
             {isLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: isPriority ? 6 : 5 }).map((_, j) => (
+                  {Array.from({ length: colCount }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
                     </td>
@@ -253,7 +285,7 @@ export default function MasterDataManager() {
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={isPriority ? 6 : 5} className="py-12 text-center text-slate-400 text-sm">
+                <td colSpan={colCount} className="py-12 text-center text-slate-400 text-sm">
                   No options yet. Add your first option.
                 </td>
               </tr>
@@ -272,6 +304,11 @@ export default function MasterDataManager() {
                 {isPriority && (
                   <td className="px-4 py-3 text-xs text-slate-500">
                     {row.color ?? '—'}{row.weight != null ? ` · ${row.weight}` : ''}
+                  </td>
+                )}
+                {parentType && (
+                  <td className="px-4 py-3 text-xs text-slate-500">
+                    {row.parentCode ? (parentLabels[row.parentCode] ?? row.parentCode) : '—'}
                   </td>
                 )}
                 <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{row.sortOrder}</td>

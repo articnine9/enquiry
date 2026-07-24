@@ -82,6 +82,16 @@ export const CreateEnquirySchema = z.object({
     .min(1, 'Select a priority')
     .default(EnquiryPriority.Medium),
 
+  // Business Category Classification — required on new enquiries.
+  businessCategory: z
+    .string({ required_error: 'Select a business category' })
+    .trim()
+    .min(1, 'Select a business category'),
+  businessSubCategory: z
+    .string({ required_error: 'Select a sub-category' })
+    .trim()
+    .min(1, 'Select a sub-category'),
+
   // Detail
   subject: z
     .string({ required_error: 'Subject is required' })
@@ -142,6 +152,8 @@ export const EnquiryFilterSchema = z.object({
   enquirySource: z.string().trim().optional(),
   product:       z.string().trim().optional(),
   category:      z.string().trim().optional(),
+  businessCategory:    z.string().trim().optional(),
+  businessSubCategory: z.string().trim().optional(),
   assignedTo:    z.string().optional(),
   city:          z.string().trim().optional(),
   district:      z.string().trim().optional(),
@@ -167,3 +179,17 @@ export const AssignEnquirySchema = z.object({
 })
 
 export type AssignEnquiryInput = z.infer<typeof AssignEnquirySchema>
+
+// ─── Reassign (escalation-driven — reason is mandatory, audited) ─────────────
+
+export const ReassignEnquirySchema = z.object({
+  enquiryId: z.string().min(1, 'Enquiry ID is required'),
+  staffId:   z.string().min(1, 'Staff member is required'),
+  reason:    z
+    .string({ required_error: 'Reason is required for reassignment' })
+    .trim()
+    .min(5, 'Reason must be at least 5 characters')
+    .max(500, 'Reason cannot exceed 500 characters'),
+})
+
+export type ReassignEnquiryInput = z.infer<typeof ReassignEnquirySchema>

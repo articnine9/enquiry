@@ -14,6 +14,7 @@ import { StatusBadge } from './StatusBadge'
 import { PriorityBadge } from './PriorityBadge'
 import { LeadStageBadge } from './LeadStageBadge'
 import { SlaBadge } from './SlaBadge'
+import { EscalationBadge } from './EscalationBadge'
 import { cn, formatDate, getInitials } from '@/lib/utils'
 import { UserRole, EnquiryStatus, ENQUIRY_SOURCE_LABELS } from '@/types/enums'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
@@ -35,6 +36,7 @@ const COLUMNS: Column[] = [
   { key: 'leadStage',    label: 'Lead Stage',    className: 'w-36 hidden lg:table-cell' },
   { key: 'priority',     label: 'Priority',      className: 'w-28' },
   { key: 'sla',          label: 'SLA',           className: 'w-32' },
+  { key: 'escalation',   label: 'Escalation',    className: 'w-36 hidden xl:table-cell' },
   { key: 'enquirySource',label: 'Source',        className: 'w-28 hidden lg:table-cell' },
   { key: 'product',      label: 'Product',       className: 'w-32 hidden xl:table-cell' },
   { key: 'city',         label: 'City',          className: 'w-28 hidden md:table-cell' },
@@ -201,6 +203,16 @@ export default function EnquiryTable({
                       slaMet={enquiry.slaMet}
                       isClosed={enquiry.status === EnquiryStatus.Cancelled}
                       isPaused={enquiry.status === EnquiryStatus.Paused}
+                    />
+                  </td>
+
+                  {/* Escalation */}
+                  <td className="px-4 py-3 whitespace-nowrap hidden xl:table-cell">
+                    <EscalationBadge
+                      lastActionAt={enquiry.lastActionAt}
+                      assignedTo={enquiry.assignedTo}
+                      status={enquiry.status}
+                      leadStage={enquiry.leadStage}
                     />
                   </td>
 

@@ -142,6 +142,8 @@ async function _createAssignmentRecord(params: {
       assignedTo: staffId,
       assignedBy: actorId,
       assignedAt: new Date(),
+      lastActionAt: new Date(),
+      escalationNotifiedTier: null,
     }
     // Only move to Assigned if currently New
     if (enquiry.status === 'new') {

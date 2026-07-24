@@ -702,6 +702,48 @@ function buildChannelPerformancePipeline(
   ]
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. BUSINESS CATEGORY CLASSIFICATION — leads/conversion by category & sub-category
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function buildBusinessCategoryReportPipeline(filters: ReportFilters): PipelineStage[] {
+  const match: Record<string, unknown> = {
+    createdAt: dateRange(filters),
+    businessCategory: { $exists: true, $ne: null },
+  }
+
+  return [
+    { $match: match },
+    {
+      $group: {
+        _id:       { category: '$businessCategory', subCategory: '$businessSubCategory' },
+        leads:     { $sum: 1 },
+        converted: { $sum: { $cond: [{ $in: ['$leadStage', LEAD_STAGE_CONVERTED] }, 1, 0] } },
+      },
+    },
+    {
+      $addFields: {
+        conversionRate: {
+          $cond: [
+            { $gt: ['$leads', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$converted', '$leads'] }, 100] }, 1] },
+            0,
+          ],
+        },
+      },
+    },
+    {
+      $project: {
+        _id:         0,
+        category:    '$_id.category',
+        subCategory: '$_id.subCategory',
+        leads: 1, converted: 1, conversionRate: 1,
+      },
+    },
+    { $sort: { category: 1, leads: -1 } },
+  ]
+}
+
 export function buildDealerPerformancePipeline(filters: ReportFilters): PipelineStage[] {
   return buildChannelPerformancePipeline(filters, 'dealerId', 'dealers')
 }

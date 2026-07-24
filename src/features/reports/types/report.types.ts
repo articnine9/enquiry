@@ -214,9 +214,20 @@ export interface MarketingSourceRow {
   conversionRate: number
 }
 
+export interface BusinessCategoryRow {
+  category:        string
+  categoryLabel:   string
+  subCategory:      string
+  subCategoryLabel: string
+  leads:           number
+  converted:       number
+  conversionRate:  number
+}
+
 export interface MarketingReportData {
   totalLeads: number
   bySource:   MarketingSourceRow[]
+  byBusinessCategory: BusinessCategoryRow[]
 }
 
 // ── Dealer / Distributor performance dashboards ───────────────────────────────

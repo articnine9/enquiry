@@ -13,6 +13,8 @@ export interface IPurchaseHistoryEntry {
   distributorId?: Types.ObjectId | null
   dealerId?:      Types.ObjectId | null
   dealValue?:    number | null
+  businessCategory?:    string | null
+  businessSubCategory?: string | null
   convertedAt:   Date
 }
 
@@ -29,6 +31,7 @@ export interface ICustomer {
   distributorId?:    Types.ObjectId | null
   dealerId?:         Types.ObjectId | null
   productCategories: string[]        // union across all purchases
+  businessCategories: string[]       // union of business_category codes across all purchases
   totalPurchases:    number
   totalRevenue:      number          // sum of purchaseHistory[].dealValue
   firstConvertedAt:  Date
@@ -48,6 +51,8 @@ const PurchaseHistoryEntrySchema = new Schema<IPurchaseHistoryEntry>(
     distributorId: { type: Schema.Types.ObjectId, ref: 'Distributor', default: null },
     dealerId:      { type: Schema.Types.ObjectId, ref: 'Dealer',       default: null },
     dealValue:     { type: Number, min: 0, default: null },
+    businessCategory:    { type: String, trim: true, default: null },
+    businessSubCategory: { type: String, trim: true, default: null },
     convertedAt:   { type: Date, required: true },
   },
   { _id: false }
@@ -82,7 +87,8 @@ const CustomerSchema = new Schema<CustomerDocument>(
     distributorId: { type: Schema.Types.ObjectId, ref: 'Distributor', default: null },
     dealerId:      { type: Schema.Types.ObjectId, ref: 'Dealer',       default: null },
 
-    productCategories: { type: [String], default: [] },
+    productCategories:  { type: [String], default: [] },
+    businessCategories: { type: [String], default: [] },
     totalPurchases:    { type: Number, default: 0, min: 0 },
     totalRevenue:      { type: Number, default: 0, min: 0 },
     firstConvertedAt:  { type: Date, required: true },

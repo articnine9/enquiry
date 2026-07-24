@@ -77,6 +77,10 @@ export async function createFollowUpAction(
       metadata:    { enquiryId: data.enquiryId, type: data.type },
     })
 
+    await Enquiry.findByIdAndUpdate(data.enquiryId, {
+      $set: { lastActionAt: new Date(), escalationNotifiedTier: null },
+    })
+
     revalidateTag(CACHE_TAGS.followUps)
     revalidateTag(CACHE_TAGS.enquiry(String(data.enquiryId)))
 
@@ -144,6 +148,10 @@ export async function updateFollowUpAction(
       { new: true, runValidators: true }
     )
     if (!followUp) return { ok: false, error: 'Follow-up not found' }
+
+    await Enquiry.findByIdAndUpdate(followUp.enquiryId, {
+      $set: { lastActionAt: new Date(), escalationNotifiedTier: null },
+    })
 
     await ActivityLog.create({
       actorId:     session.user.id,
@@ -239,6 +247,9 @@ export async function closeFollowUpAction(
       { _id: followUp.enquiryId, status: 'in_progress' },
       { $set: { status: 'follow_up' } }
     )
+    await Enquiry.findByIdAndUpdate(followUp.enquiryId, {
+      $set: { lastActionAt: new Date(), escalationNotifiedTier: null },
+    })
 
     const actionName =
       data.status === FollowUpStatus.Completed

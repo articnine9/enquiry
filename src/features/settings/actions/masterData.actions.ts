@@ -7,6 +7,7 @@ import MasterData, {
   MASTER_DATA_TYPES,
   type MasterDataType,
 } from '@/lib/db/models/MasterData'
+import { MASTER_DATA_PARENT_TYPE } from '@/features/settings/masterData.constants'
 import Enquiry from '@/lib/db/models/Enquiry'
 import { requireRole } from '@/lib/auth/session'
 import { UserRole } from '@/types/enums'
@@ -18,10 +19,12 @@ function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 // ── Which Enquiry field each type maps to (used for the in-use guard) ──────────
 
 const TYPE_TO_ENQUIRY_FIELD: Record<MasterDataType, string> = {
-  enquiry_source:   'enquirySource',
-  enquiry_category: 'category',
-  enquiry_product:  'product',
-  enquiry_priority: 'priority',
+  enquiry_source:       'enquirySource',
+  enquiry_category:     'category',
+  enquiry_product:      'product',
+  enquiry_priority:     'priority',
+  business_category:    'businessCategory',
+  business_subcategory: 'businessSubCategory',
 }
 
 // ── Row shape returned to the admin UI ─────────────────────────────────────────
@@ -33,6 +36,7 @@ export interface MasterDataRow {
   label:     string
   color?:    string
   weight?:   number
+  parentCode?: string
   sortOrder: number
   isActive:  boolean
   isSystem:  boolean
@@ -46,9 +50,25 @@ const MasterDataInput = z.object({
   label:     z.string().trim().min(1, 'Label is required').max(80, 'Label cannot exceed 80 characters'),
   color:     z.string().trim().optional(),
   weight:    z.coerce.number().optional(),
+  parentCode: z.string().trim().toLowerCase().optional(),
   sortOrder: z.coerce.number().default(0),
   isActive:  z.boolean().default(true),
 })
+
+// Sub-categories must reference an existing, active parent-category row —
+// checked here since it's a cross-row lookup a schema validator can't reach.
+async function validateParentCode(
+  type: MasterDataType,
+  parentCode?: string
+): Promise<string | null> {
+  const parentType = MASTER_DATA_PARENT_TYPE[type]
+  if (!parentType) return null
+  if (!parentCode) return 'Select a parent category'
+
+  const parent = await MasterData.findOne({ type: parentType, code: parentCode })
+  if (!parent || !parent.isActive) return 'Selected parent category is not valid'
+  return null
+}
 
 // ── List (admin) ────────────────────────────────────────────────────────────────
 
@@ -70,6 +90,7 @@ export async function getMasterDataAction(
         label:     r.label,
         color:     r.color,
         weight:    r.weight,
+        parentCode: r.parentCode,
         sortOrder: r.sortOrder ?? 0,
         isActive:  r.isActive,
         isSystem:  r.isSystem,
@@ -96,6 +117,9 @@ export async function createMasterDataAction(
 
     const exists = await MasterData.findOne({ type: parsed.data.type, code: parsed.data.code })
     if (exists) return { ok: false, error: 'An option with this code already exists' }
+
+    const parentError = await validateParentCode(parsed.data.type, parsed.data.parentCode)
+    if (parentError) return { ok: false, error: parentError }
 
     const row = await MasterData.create(parsed.data)
     revalidateTag(CACHE_TAGS.masterData)
@@ -126,7 +150,13 @@ export async function updateMasterDataAction(
       return { ok: false, error: parsed.error.errors[0]?.message ?? 'Validation failed' }
     }
 
-    await MasterData.findByIdAndUpdate(id, { $set: parsed.data })
+    const data = parsed.data as z.infer<typeof MasterDataInput>
+    const effectiveType = data.type ?? existing.type
+    const effectiveParentCode = 'parentCode' in data ? data.parentCode : existing.parentCode
+    const parentError = await validateParentCode(effectiveType, effectiveParentCode)
+    if (parentError) return { ok: false, error: parentError }
+
+    await MasterData.findByIdAndUpdate(id, { $set: data })
     revalidateTag(CACHE_TAGS.masterData)
     return { ok: true, data: null }
   } catch (err: unknown) {

@@ -10,7 +10,7 @@ import { Combobox } from '@/components/forms/Combobox'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
 import { cn } from '@/lib/utils'
-import type { MasterOption } from '@/features/settings/services/masterData.service'
+import type { MasterOption, MasterSubOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
 
 export interface EnquiryFormOptions {
@@ -18,6 +18,8 @@ export interface EnquiryFormOptions {
   categories: MasterOption[]
   products:   MasterOption[]
   priorities: MasterOption[]
+  businessCategories:    MasterOption[]
+  businessSubCategories: MasterSubOption[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,7 +85,8 @@ export default function EnquiryForm({
   // ── Select options (from MasterData) ─────────────────────────────────────────
 
   const { sources: sourceOptions, priorities: priorityOptions,
-          products: productOptions, categories: categoryOptions } = options
+          products: productOptions, categories: categoryOptions,
+          businessCategories: businessCategoryOptions, businessSubCategories: allBusinessSubCategoryOptions } = options
 
   // Default selection: prefer a just-submitted (failed) value, then the existing
   // value on edit, else the first available option.
@@ -102,6 +105,25 @@ export default function EnquiryForm({
     // Clear the city whenever it no longer belongs to the selected district
     const stillValid = getCityOptions(next).some((c) => c.value === city)
     if (!stillValid) setCity('')
+  }
+
+  // ── Business Category → Sub-category dependent dropdowns ────────────────────
+
+  const [businessCategory, setBusinessCategory] = useState(
+    submittedStr('businessCategory') ?? enquiry?.businessCategory ?? ''
+  )
+  const [businessSubCategory, setBusinessSubCategory] = useState(
+    submittedStr('businessSubCategory') ?? enquiry?.businessSubCategory ?? ''
+  )
+  const businessSubCategoryOptions = useMemo(
+    () => allBusinessSubCategoryOptions.filter((o) => o.parentCode === businessCategory),
+    [allBusinessSubCategoryOptions, businessCategory]
+  )
+
+  function handleBusinessCategoryChange(next: string) {
+    setBusinessCategory(next)
+    const stillValid = allBusinessSubCategoryOptions.some((o) => o.parentCode === next && o.value === businessSubCategory)
+    if (!stillValid) setBusinessSubCategory('')
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -271,6 +293,37 @@ export default function EnquiryForm({
               className={selectClass(!!fe.priority)}
             >
               {priorityOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="businessCategory" label="Business Category" required error={fe.businessCategory}>
+            <select
+              id="businessCategory" name="businessCategory"
+              value={businessCategory}
+              onChange={(e) => handleBusinessCategoryChange(e.target.value)}
+              disabled={isPending}
+              className={selectClass(!!fe.businessCategory)}
+            >
+              <option value="">Select category…</option>
+              {businessCategoryOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="businessSubCategory" label="Sub-Category" required error={fe.businessSubCategory}
+            hint={!businessCategory ? 'Select a business category first' : undefined}>
+            <select
+              id="businessSubCategory" name="businessSubCategory"
+              value={businessSubCategory}
+              onChange={(e) => setBusinessSubCategory(e.target.value)}
+              disabled={isPending || !businessCategory}
+              className={selectClass(!!fe.businessSubCategory)}
+            >
+              <option value="">Select sub-category…</option>
+              {businessSubCategoryOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>

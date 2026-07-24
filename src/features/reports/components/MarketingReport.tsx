@@ -19,6 +19,51 @@ function convColor(rate: number) {
   return 'text-red-500 dark:text-red-400'
 }
 
+function BusinessCategoryTable() {
+  const data = useMarketingReport()
+  const rows = data?.byBusinessCategory ?? []
+
+  if (!rows.length) {
+    return <p className="py-8 text-center text-sm text-slate-400">No classified leads for this period</p>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-100 dark:border-slate-800">
+            {['Category', 'Sub-Category', 'Leads', 'Converted', 'Conversion Rate'].map((h) => (
+              <th key={h} className="text-left text-xs font-semibold text-slate-500 dark:text-slate-400 pb-2.5 pr-4 whitespace-nowrap">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((r, i) => (
+            <tr key={`${r.category}-${r.subCategory}-${i}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+              <td className="py-3 pr-4 text-xs font-semibold text-slate-800 dark:text-slate-200">{r.categoryLabel}</td>
+              <td className="py-3 pr-4 text-xs text-slate-600 dark:text-slate-400">{r.subCategoryLabel}</td>
+              <td className="py-3 pr-4 text-xs tabular-nums font-semibold">{r.leads}</td>
+              <td className="py-3 pr-4 text-xs tabular-nums text-green-600 dark:text-green-400">{r.converted}</td>
+              <td className="py-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-20 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${r.conversionRate}%` }} />
+                  </div>
+                  <span className={cn('text-xs font-bold tabular-nums', convColor(r.conversionRate))}>
+                    {r.conversionRate}%
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function SourceTable() {
   const data = useMarketingReport()
   const rows = data?.bySource ?? []
@@ -135,6 +180,12 @@ export default function MarketingReport() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Conversion by Source</h3>
             <SourceTable />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Business Category Classification</h3>
+            <p className="text-xs text-slate-400 mb-4">Segment customers and generate category-wise reports</p>
+            <BusinessCategoryTable />
           </div>
         </>
       )}

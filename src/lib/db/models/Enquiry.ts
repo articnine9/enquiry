@@ -29,6 +29,11 @@ export interface IEnquiry {
   category:      string
   product:       string
   priority:      string
+  // Business Category Classification — required on new enquiries, validated
+  // against MasterData (business_category / business_subcategory) at the
+  // action layer, same as source/category/product/priority above.
+  businessCategory?:    string
+  businessSubCategory?: string
   priorityWeight: number
   status:        EnquiryStatus
   // Sales pipeline stage — independent of status above. Free picklist, no FSM.
@@ -57,6 +62,16 @@ export interface IEnquiry {
   // Deal value captured at conversion — feeds Revenue Generated on the Staff
   // performance dashboard. Null for leads not yet converted (or legacy records).
   dealValue?:     number | null
+
+  // Escalation — bumped on meaningful staff action (status/lead-stage change,
+  // assignment, follow-up), distinct from `updatedAt` which also gets touched
+  // by system-side bookkeeping (e.g. SLA pause handling). Drives the 24h/48h/72h
+  // reminder → escalation → reassignment tiers.
+  lastActionAt?:  Date
+  // Highest escalation tier a notification has already been sent for, so the
+  // lazy check (run whenever the enquiry list/detail is viewed) never re-notifies
+  // for the same tier crossing.
+  escalationNotifiedTier?: 'reminder' | 'escalated' | null
 
   // SLA — resolved via SLAPolicy at create/priority-change time, frozen at resolution
   slaPolicyId?:      Types.ObjectId | null
@@ -219,6 +234,14 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       trim:    true,
       default: EnquiryPriority.Medium,
     },
+    businessCategory: {
+      type: String,
+      trim: true,
+    },
+    businessSubCategory: {
+      type: String,
+      trim: true,
+    },
     // Denormalised priority rank (from MasterData.weight) for correct sorting.
     priorityWeight: {
       type:    Number,
@@ -281,6 +304,13 @@ const EnquirySchema = new Schema<EnquiryDocument>(
     convertedAt:    { type: Date, default: null },
     dealValue:      { type: Number, min: 0, default: null },
 
+    lastActionAt: { type: Date, default: Date.now },
+    escalationNotifiedTier: {
+      type:    String,
+      enum:    ['reminder', 'escalated', null],
+      default: null,
+    },
+
     // ── SLA ───────────────────────────────────────────────────────────────────
     slaPolicyId:      { type: Schema.Types.ObjectId, ref: 'SLAPolicy', default: null },
     slaDueAt:         { type: Date,    default: null },
@@ -324,6 +354,8 @@ EnquirySchema.index({ slaMet: 1 })                // compliance reporting
 EnquirySchema.index({ distributorId: 1, createdAt: -1 })
 EnquirySchema.index({ dealerId: 1, createdAt: -1 })
 EnquirySchema.index({ leadStage: 1, createdAt: -1 })
+EnquirySchema.index({ businessCategory: 1, businessSubCategory: 1 })
+EnquirySchema.index({ assignedTo: 1, lastActionAt: 1 })
 // Full-text search across the most user-visible fields
 EnquirySchema.index(
   {
