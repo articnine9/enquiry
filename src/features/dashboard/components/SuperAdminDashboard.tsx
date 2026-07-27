@@ -12,6 +12,7 @@ import StatCard from './StatCard'
 import DonutChart from './DonutChart'
 import MiniBarChart from './MiniBarChart'
 import TrendLineChart from './TrendLineChart'
+import ManagementSnapshot from './ManagementSnapshot'
 import { cn } from '@/lib/utils'
 
 // ── Status colours ────────────────────────────────────────────────────────────
@@ -147,6 +148,8 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="space-y-6">
+
+      <ManagementSnapshot />
 
       {/* ── Row 1: KPI cards ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

@@ -38,7 +38,7 @@ export default async function DistributorDetailPage({ params }: PageProps) {
   const recentVisits = visitsResult.ok ? visitsResult.data.data : []
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-6">
       <PageHeader
         icon={Truck}
         title={distributor.name}

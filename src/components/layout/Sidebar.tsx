@@ -6,6 +6,7 @@ import {
   LayoutDashboard, ClipboardList, Users, MapPin,
   BarChart3, Bell, Shield, Settings, ChevronLeft,
   CalendarClock, Activity, Truck, Users2, Footprints,
+  MessageSquareWarning,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -65,6 +66,12 @@ const NAV_ITEMS: NavItem[] = [
     href:  '/field-visits',
     label: 'Field Visits',
     icon:  Footprints,
+    roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+  },
+  {
+    href:  '/complaints',
+    label: 'Complaints',
+    icon:  MessageSquareWarning,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
   },
   {

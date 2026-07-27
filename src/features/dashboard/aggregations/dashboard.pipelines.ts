@@ -1,5 +1,5 @@
 import type { PipelineStage } from 'mongoose'
-import { EnquiryStatus, UserRole, UserStatus } from '@/types/enums'
+import { EnquiryStatus, UserRole, UserStatus, LeadStage, LEAD_STAGE_CONVERTED } from '@/types/enums'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -535,6 +535,82 @@ export function buildFollowUpSummaryPipeline(zoneStaffIds?: string[]): PipelineS
               enquiryId:   { $toString: '$enquiryId' },
               staffName:   { $arrayElemAt: ['$staff.name', 0] },
               notes:       1,
+            },
+          },
+        ],
+      },
+    },
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MANAGEMENT SNAPSHOT — mobile dashboard KPI row (Manager + SuperAdmin)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * New leads today, converted/lost leads this month, monthly orders + sales
+ * value, and the top dealer/distributor by this month's deal value.
+ * Run on the Enquiry collection.
+ *
+ * "Lost" has no dedicated timestamp field, so `updatedAt` is used as the best
+ * available proxy for when a lead was marked Lost — acceptable imprecision
+ * (a lead could theoretically be edited without changing stage), matching the
+ * data actually available rather than adding a new field for one metric.
+ */
+export function buildManagementSnapshotPipeline(): PipelineStage[] {
+  const today = startOfToday()
+  const monthStart = startOfMonth()
+
+  return [
+    {
+      $facet: {
+        newLeadsToday: [
+          { $match: { createdAt: { $gte: today } } },
+          { $count: 'n' },
+        ],
+        convertedThisMonth: [
+          { $match: { leadStage: { $in: LEAD_STAGE_CONVERTED }, convertedAt: { $gte: monthStart } } },
+          { $count: 'n' },
+        ],
+        lostThisMonth: [
+          { $match: { leadStage: LeadStage.Lost, updatedAt: { $gte: monthStart } } },
+          { $count: 'n' },
+        ],
+        monthlySalesValue: [
+          { $match: { convertedAt: { $gte: monthStart }, dealValue: { $ne: null } } },
+          { $group: { _id: null, total: { $sum: '$dealValue' } } },
+        ],
+        bestDealer: [
+          { $match: { convertedAt: { $gte: monthStart }, dealerId: { $ne: null } } },
+          { $group: { _id: '$dealerId', revenue: { $sum: { $ifNull: ['$dealValue', 0] } }, orders: { $sum: 1 } } },
+          { $sort: { revenue: -1 } },
+          { $limit: 1 },
+          {
+            $lookup: { from: 'dealers', localField: '_id', foreignField: '_id', as: 'dealer' },
+          },
+          {
+            $project: {
+              _id: 0,
+              name: { $arrayElemAt: ['$dealer.name', 0] },
+              revenue: 1,
+              orders: 1,
+            },
+          },
+        ],
+        bestDistributor: [
+          { $match: { convertedAt: { $gte: monthStart }, distributorId: { $ne: null } } },
+          { $group: { _id: '$distributorId', revenue: { $sum: { $ifNull: ['$dealValue', 0] } }, orders: { $sum: 1 } } },
+          { $sort: { revenue: -1 } },
+          { $limit: 1 },
+          {
+            $lookup: { from: 'distributors', localField: '_id', foreignField: '_id', as: 'distributor' },
+          },
+          {
+            $project: {
+              _id: 0,
+              name: { $arrayElemAt: ['$distributor.name', 0] },
+              revenue: 1,
+              orders: 1,
             },
           },
         ],

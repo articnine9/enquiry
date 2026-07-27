@@ -9,6 +9,7 @@ import {
 import { useDashboardStore, useManagerDash } from '@/store/dashboard.store'
 import { getManagerDashboardAction } from '../actions/dashboard.actions'
 import StatCard from './StatCard'
+import ManagementSnapshot from './ManagementSnapshot'
 import DonutChart from './DonutChart'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/utils'
@@ -225,6 +226,8 @@ export default function ManagerDashboard() {
 
   return (
     <div className="space-y-6">
+
+      <ManagementSnapshot />
 
       {/* ── Row 1: KPI cards ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

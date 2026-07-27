@@ -17,6 +17,7 @@ import {
   buildTeamPerformancePipeline,
   buildPendingEnquiriesPipeline,
   buildFollowUpSummaryPipeline,
+  buildManagementSnapshotPipeline,
   buildMyEnquiriesPipeline,
   buildMyFollowUpsPipeline,
   buildMyPendingTasksPipeline,
@@ -289,6 +290,50 @@ export async function getManagerDashboardAction(params?: {
     return { ok: true, data: toPlain(data) }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to load dashboard'
+    return { ok: false, error: msg }
+  }
+}
+
+// ── Management snapshot (Manager + SuperAdmin, mobile-friendly KPI row) ───────
+
+export interface ManagementSnapshotData {
+  newLeadsToday:      number
+  pendingFollowUps:   number
+  convertedThisMonth: number
+  lostThisMonth:      number
+  monthlyOrders:      number
+  monthlySalesValue:  number
+  bestDealer:         { name: string; revenue: number; orders: number } | null
+  bestDistributor:    { name: string; revenue: number; orders: number } | null
+}
+
+export async function getManagementSnapshotAction(): Promise<ActionResult<ManagementSnapshotData>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await dbConnect()
+
+    const [snapshotRaw, pendingFollowUps] = await Promise.all([
+      Enquiry.aggregate(buildManagementSnapshotPipeline()),
+      FollowUp.countDocuments({ status: 'scheduled' }),
+    ])
+
+    const s = snapshotRaw[0]
+    const convertedThisMonth = s.convertedThisMonth[0]?.n ?? 0
+
+    const data: ManagementSnapshotData = {
+      newLeadsToday:      s.newLeadsToday[0]?.n ?? 0,
+      pendingFollowUps,
+      convertedThisMonth,
+      lostThisMonth:      s.lostThisMonth[0]?.n ?? 0,
+      monthlyOrders:      convertedThisMonth,
+      monthlySalesValue:  s.monthlySalesValue[0]?.total ?? 0,
+      bestDealer:         s.bestDealer[0] ?? null,
+      bestDistributor:    s.bestDistributor[0] ?? null,
+    }
+
+    return { ok: true, data: toPlain(data) }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to load management snapshot'
     return { ok: false, error: msg }
   }
 }

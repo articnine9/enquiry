@@ -92,6 +92,43 @@ export const VISIT_TYPE_LABELS: Record<VisitType, string> = {
   [VisitType.DistributorVisit]: 'Distributor Visit',
 }
 
+// ── Customer complaint module ───────────────────────────────────────────────
+
+export enum ComplaintType {
+  Product  = 'product_complaint',
+  Delivery = 'delivery_complaint',
+  Service  = 'service_complaint',
+}
+
+export const COMPLAINT_TYPE_LABELS: Record<ComplaintType, string> = {
+  [ComplaintType.Product]:  'Product Complaint',
+  [ComplaintType.Delivery]: 'Delivery Complaint',
+  [ComplaintType.Service]:  'Service Complaint',
+}
+
+export enum ComplaintStatus {
+  Open       = 'open',
+  InProgress = 'in_progress',
+  Resolved   = 'resolved',
+  Closed     = 'closed',
+}
+
+export const COMPLAINT_STATUS_LABELS: Record<ComplaintStatus, string> = {
+  [ComplaintStatus.Open]:       'Open',
+  [ComplaintStatus.InProgress]: 'In Progress',
+  [ComplaintStatus.Resolved]:   'Resolved',
+  [ComplaintStatus.Closed]:     'Closed',
+}
+
+// Free picklist, mirrors LeadStage/EnquiryStatus philosophy: Closed only
+// reachable after Resolved (an unresolved complaint shouldn't just vanish).
+export const COMPLAINT_ALLOWED_TRANSITIONS: Partial<Record<ComplaintStatus, ComplaintStatus[]>> = {
+  [ComplaintStatus.Open]:       [ComplaintStatus.InProgress, ComplaintStatus.Resolved],
+  [ComplaintStatus.InProgress]: [ComplaintStatus.Resolved, ComplaintStatus.Open],
+  [ComplaintStatus.Resolved]:   [ComplaintStatus.Closed, ComplaintStatus.InProgress],
+  [ComplaintStatus.Closed]:     [],
+}
+
 export enum FollowUpType {
   Call    = 'call',
   Email   = 'email',
@@ -160,6 +197,9 @@ export enum ActivityAction {
   LeadStageChanged  = 'enquiry.lead_stage_changed',
   // Field visit actions
   FieldVisitLogged  = 'field_visit.logged',
+  // Complaint actions
+  ComplaintLogged   = 'complaint.logged',
+  ComplaintStatusChanged = 'complaint.status_changed',
   // Follow-up actions
   FollowUpCreated   = 'followup.created',
   FollowUpCompleted = 'followup.completed',
@@ -189,6 +229,7 @@ export enum EntityType {
   Assignment = 'assignment',
   Session    = 'session',
   FieldVisit = 'field_visit',
+  Complaint  = 'complaint',
 }
 
 export enum NotificationType {

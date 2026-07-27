@@ -17,6 +17,7 @@ export const CACHE_TAGS = {
   distributors:  'distributors',
   dealers:       'dealers',
   fieldVisits:   'field-visits',
+  complaints:    'complaints',
   // aggregate tags (invalidated when any record in the domain changes)
   dashboard:     'dashboard',
   reports:       'reports',

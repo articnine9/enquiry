@@ -1,9 +1,12 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { Users2, Repeat, Package } from 'lucide-react'
+import { Users2, Repeat, Package, MessageSquareWarning } from 'lucide-react'
 import { requireRole } from '@/lib/auth/session'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getCustomerAction } from '@/features/customers/actions/customer.actions'
+import { getComplaintsForCustomerAction } from '@/features/complaints/actions/complaint.actions'
+import ComplaintTypeBadge from '@/features/complaints/components/ComplaintTypeBadge'
+import ComplaintStatusBadge from '@/features/complaints/components/ComplaintStatusBadge'
 import { formatDate } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
@@ -26,6 +29,9 @@ export default async function CustomerDetailPage({ params }: PageProps) {
   const result = await getCustomerAction(id)
   if (!result.ok) notFound()
   const customer = result.data
+
+  const complaintsResult = await getComplaintsForCustomerAction(id)
+  const complaints = complaintsResult.ok ? complaintsResult.data : []
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-5xl mx-auto space-y-6">
@@ -145,6 +151,43 @@ export default async function CustomerDetailPage({ params }: PageProps) {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Recent complaints */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <MessageSquareWarning className="w-4 h-4 text-slate-400" />
+            Recent Complaints
+          </h2>
+          {complaints.length > 0 && (
+            <Link href="/complaints" className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+              View all
+            </Link>
+          )}
+        </div>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          {complaints.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 text-sm">No complaints logged for this customer.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {complaints.map((c) => (
+                <li key={c._id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/complaints/${c._id}`} className="text-sm font-medium text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate">
+                      {c.description.slice(0, 60)}{c.description.length > 60 ? '…' : ''}
+                    </Link>
+                    <p className="text-xs text-slate-400">{formatDate(c.complaintDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <ComplaintTypeBadge type={c.complaintType} />
+                    <ComplaintStatusBadge status={c.status} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

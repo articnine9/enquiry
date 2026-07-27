@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { UserCheck, X, AlertCircle, Loader2 } from 'lucide-react'
-import { assignEnquiry } from '../actions/enquiry.actions'
+import { manualAssignAction } from '@/features/assignments/actions/assignment.actions'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { cn } from '@/lib/utils'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
@@ -39,7 +39,7 @@ export default function AssignStaffModal({
   const dialogRef = useRef<HTMLDialogElement>(null)
   const enquiryId = String(enquiry._id)
 
-  const [state, formAction, isPending] = useActionState(assignEnquiry, null)
+  const [state, formAction, isPending] = useActionState(manualAssignAction, null)
 
   useEffect(() => {
     dialogRef.current?.showModal()
@@ -47,12 +47,12 @@ export default function AssignStaffModal({
 
   useEffect(() => {
     if (!state) return
-    if ((state as { ok: boolean }).ok) {
+    if (state.ok) {
       toast.success('Enquiry assigned')
-      onAssigned((state as unknown as { data: EnquiryDocument }).data)
+      onAssigned(enquiry)
       onClose()
     } else {
-      toast.error((state as { error: string }).error)
+      toast.error(state.error)
     }
   }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import type { FilterQuery } from 'mongoose'
 import dbConnect from '@/lib/db/connection'
 import Enquiry, { type EnquiryDocument } from '@/lib/db/models/Enquiry'
-import { ActivityLog, Assignment, User } from '@/lib/db/models'
+import { ActivityLog, User } from '@/lib/db/models'
 import { requireSession, requirePermission, requireRole, authErrorToResult } from '@/lib/auth/session'
 import { autoAssign, reassign } from '@/features/assignments/services/assignment.service'
 import { resolveMasterValue } from '@/features/settings/services/masterData.service'
@@ -21,13 +21,11 @@ import {
   UpdateEnquirySchema,
   UpdateStatusSchema,
   EnquiryFilterSchema,
-  AssignEnquirySchema,
   ReassignEnquirySchema,
 } from '../validations/enquiry.schema'
 import {
   ActivityAction,
   EntityType,
-  AssignmentType,
   UserRole,
   UserStatus,
   EnquiryStatus,
@@ -622,71 +620,6 @@ export async function getEnquiries(
         hasPrev:    page > 1,
       },
     }
-  } catch (err) {
-    return authErrorToResult(err)
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ASSIGN
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function assignEnquiry(
-  payload: unknown
-): Promise<ActionResult<{ assigned: boolean }>> {
-  try {
-    const session = await requirePermission('enquiry:assign')
-
-    const parsed = AssignEnquirySchema.safeParse(payload)
-    if (!parsed.success) {
-      return {
-        ok:          false,
-        error:       'Invalid assignment data',
-        fieldErrors: parsed.error.flatten().fieldErrors,
-      }
-    }
-
-    await dbConnect()
-
-    const staff = await User.findById(parsed.data.staffId).lean()
-    if (!staff) return { ok: false, error: 'Staff member not found' }
-
-    // Assignment record — pre-save hook deactivates any previous active assignment
-    await Assignment.create({
-      enquiryId:      parsed.data.enquiryId,
-      assignedTo:     parsed.data.staffId,
-      assignedBy:     session.user.id,
-      assignmentType: AssignmentType.Manual,
-      reason:         parsed.data.reason,
-      isActive:       true,
-    })
-
-    await Enquiry.findByIdAndUpdate(parsed.data.enquiryId, {
-      assignedTo: parsed.data.staffId,
-      assignedBy: session.user.id,
-      assignedAt: new Date(),
-      status:     EnquiryStatus.Assigned,
-      lastActionAt: new Date(),
-      escalationNotifiedTier: null,
-    })
-
-    // Decrement previous staff load, increment new staff load
-    await User.findByIdAndUpdate(parsed.data.staffId, { $inc: { currentLoad: 1 } })
-
-    await ActivityLog.create({
-      actorId:    session.user.id,
-      actorRole:  session.user.role,
-      action:     ActivityAction.EnquiryAssigned,
-      entityType: EntityType.Enquiry,
-      entityId:   parsed.data.enquiryId,
-      metadata:   { staffId: parsed.data.staffId, staffName: staff.name },
-    })
-
-    revalidateTag(CACHE_TAGS.enquiries)
-    revalidateTag(CACHE_TAGS.assignments)
-    revalidateTag(CACHE_TAGS.dashboard)
-
-    return { ok: true, data: { assigned: true } }
   } catch (err) {
     return authErrorToResult(err)
   }
