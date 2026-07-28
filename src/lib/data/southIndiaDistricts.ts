@@ -180,3 +180,94 @@ export function getCityOptions(district: string): { value: string; label: string
   const cities = CITIES_BY_DISTRICT.get(district) ?? []
   return cities.map((c) => ({ value: c, label: c }))
 }
+
+// ─── Known pincodes (major cities / district HQs only) ────────────────────────
+// Deliberately NOT comprehensive — only well-known head-office pincodes we're
+// confident about. The vast majority of the ~700 towns above have no entry
+// here; the Pincode field simply stays free text for those, same as today.
+
+const KNOWN_PINCODES: Record<string, string> = {
+  // Tamil Nadu
+  'Chennai|Chennai':                    '600001',
+  'Chennai|T. Nagar':                   '600017',
+  'Chennai|Adyar':                      '600020',
+  'Chennai|Velachery':                  '600042',
+  'Chennai|Anna Nagar':                 '600040',
+  'Chennai|Mylapore':                   '600004',
+  'Chennai|Egmore':                     '600008',
+  'Chennai|Guindy':                     '600032',
+  'Coimbatore|Coimbatore':              '641001',
+  'Madurai|Madurai':                    '625001',
+  'Tiruchirappalli|Tiruchirappalli':    '620001',
+  'Salem|Salem':                        '636001',
+  'Tirunelveli|Tirunelveli':            '627001',
+  'Erode|Erode':                        '638001',
+  'Vellore|Vellore':                    '632001',
+  'Thanjavur|Thanjavur':                '613001',
+  'Dindigul|Dindigul':                  '624001',
+  'Thoothukudi|Thoothukudi':            '628001',
+  'Karur|Karur':                        '639001',
+  'Cuddalore|Cuddalore':                '607001',
+  'Namakkal|Namakkal':                  '637001',
+  'Krishnagiri|Hosur':                  '635109',
+  'Kancheepuram|Kancheepuram':          '631501',
+  'Tiruppur|Tiruppur':                  '641601',
+  'Nagapattinam|Nagapattinam':          '611001',
+  'Sivaganga|Karaikudi':                '630001',
+  'Virudhunagar|Sivakasi':              '626123',
+
+  // Kerala
+  'Thiruvananthapuram|Thiruvananthapuram': '695001',
+  'Ernakulam|Kochi':                    '682001',
+  'Ernakulam|Ernakulam':                '682011',
+  'Kozhikode|Kozhikode':                '673001',
+  'Thrissur|Thrissur':                  '680001',
+  'Kollam|Kollam':                      '691001',
+  'Kannur|Kannur':                      '670001',
+  'Kottayam|Kottayam':                  '686001',
+  'Palakkad|Palakkad':                  '678001',
+  'Alappuzha|Alappuzha':                '688001',
+  'Malappuram|Malappuram':              '676505',
+
+  // Karnataka
+  'Bengaluru Urban|Bengaluru':          '560001',
+  'Mysuru|Mysuru':                      '570001',
+  'Dakshina Kannada|Mangaluru':         '575001',
+  'Dharwad|Dharwad':                    '580001',
+  'Dharwad|Hubballi':                   '580020',
+  'Belagavi|Belagavi':                  '590001',
+  'Kalaburagi|Kalaburagi':              '585101',
+  'Davanagere|Davanagere':              '577001',
+  'Shivamogga|Shivamogga':              '577201',
+  'Tumakuru|Tumakuru':                  '572101',
+  'Ballari|Ballari':                    '583101',
+  'Vijayapura|Vijayapura':              '586101',
+
+  // Andhra Pradesh
+  'Visakhapatnam|Visakhapatnam':        '530001',
+  'Guntur|Guntur':                      '522001',
+  'NTR|Vijayawada':                     '520001',
+  'Kurnool|Kurnool':                    '518001',
+  'Ananthapuramu|Anantapur':            '515001',
+  'Sri Potti Sriramulu Nellore|Nellore': '524001',
+  'Chittoor|Chittoor':                  '517001',
+  'Tirupati|Tirupati':                  '517501',
+  'Kakinada|Kakinada':                  '533001',
+  'East Godavari|Rajahmundry':          '533101',
+  'YSR Kadapa|Kadapa':                  '516001',
+
+  // Telangana
+  'Hyderabad|Hyderabad':                '500001',
+  'Hyderabad|Secunderabad':             '500003',
+  'Warangal|Warangal':                  '506002',
+  'Karimnagar|Karimnagar':              '505001',
+  'Nizamabad|Nizamabad':                '503001',
+  'Khammam|Khammam':                    '507001',
+  'Mahabubnagar|Mahabubnagar':          '509001',
+  'Nalgonda|Nalgonda':                  '508001',
+}
+
+/** Known pincode for a district+city pair, or undefined if not in our curated set. */
+export function getKnownPincode(district: string, city: string): string | undefined {
+  return KNOWN_PINCODES[`${district}|${city}`]
+}

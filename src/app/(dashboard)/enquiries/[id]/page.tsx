@@ -12,6 +12,7 @@ import { LeadStageTracker } from '@/features/enquiries/components/LeadStageTrack
 import { LeadStageBadge } from '@/features/enquiries/components/LeadStageBadge'
 import EnquiryDetailActions from '@/features/enquiries/components/EnquiryDetailActions'
 import FollowUpSection from '@/features/followups/components/FollowUpSection'
+import VoiceNoteSection from '@/features/voice-notes/components/VoiceNoteSection'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { labelFor, resolveMasterValue } from '@/features/settings/services/masterData.service'
 import { getCustomerByPhoneAction } from '@/features/customers/actions/customer.actions'
@@ -141,6 +142,14 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
             canCreate={!isCancelled}
             canEdit={!isCancelled}
           />
+
+          {/* Voice work reports */}
+          <DetailCard title="Voice Work Reports">
+            <VoiceNoteSection
+              enquiryId={String(enquiry._id)}
+              canRecord={!isCancelled}
+            />
+          </DetailCard>
 
           {/* Enquiry details */}
           <DetailCard title="Enquiry Details">

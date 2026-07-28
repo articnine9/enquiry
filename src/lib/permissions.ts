@@ -31,6 +31,8 @@ const PERMISSIONS: Record<UserRole, Set<string>> = {
     'complaint:read',
     'complaint:create',
     'complaint:update',
+    'voicenote:read',
+    'voicenote:create',
   ]),
 
   [UserRole.Staff]: new Set([
@@ -48,6 +50,8 @@ const PERMISSIONS: Record<UserRole, Set<string>> = {
     'complaint:read',
     'complaint:create',
     'complaint:update',
+    'voicenote:read',
+    'voicenote:create',
   ]),
 }
 

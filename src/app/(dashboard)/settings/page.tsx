@@ -83,7 +83,7 @@ export default async function SettingsPage() {
   const groups: Group[] = ['account', 'admin']
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-8">
       {/* ── Hero header ─────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 p-6 sm:p-7 shadow-sm">
         {/* decorative glow */}

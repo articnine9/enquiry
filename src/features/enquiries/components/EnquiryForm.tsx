@@ -8,7 +8,7 @@ import { createEnquiry, updateEnquiry } from '../actions/enquiry.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
 import { Combobox } from '@/components/forms/Combobox'
 import { SubmitButton } from '@/components/forms/SubmitButton'
-import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
+import { getDistrictOptions, getCityOptions, getKnownPincode } from '@/lib/data/southIndiaDistricts'
 import { cn } from '@/lib/utils'
 import type { MasterOption, MasterSubOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
@@ -98,6 +98,7 @@ export default function EnquiryForm({
   const districtOptions = useMemo(() => getDistrictOptions(), [])
   const [district, setDistrict] = useState(enquiry?.district ?? '')
   const [city,     setCity]     = useState(enquiry?.city ?? '')
+  const [pincode,  setPincode]  = useState(submittedStr('pincode') ?? enquiry?.pincode ?? '')
   const cityOptions = useMemo(() => getCityOptions(district), [district])
 
   function handleDistrictChange(next: string) {
@@ -105,6 +106,16 @@ export default function EnquiryForm({
     // Clear the city whenever it no longer belongs to the selected district
     const stillValid = getCityOptions(next).some((c) => c.value === city)
     if (!stillValid) setCity('')
+  }
+
+  function handleCityChange(next: string) {
+    setCity(next)
+    // Auto-fill pincode for known major cities, but never clobber something
+    // the user already typed.
+    if (!pincode) {
+      const known = getKnownPincode(district, next)
+      if (known) setPincode(known)
+    }
   }
 
   // ── Business Category → Sub-category dependent dropdowns ────────────────────
@@ -205,7 +216,7 @@ export default function EnquiryForm({
                 id="city" name="city"
                 options={cityOptions}
                 value={city}
-                onChange={setCity}
+                onChange={handleCityChange}
                 placeholder="Select city"
                 searchPlaceholder="Search city…"
                 emptyText="No city found"
@@ -216,10 +227,11 @@ export default function EnquiryForm({
             </FormField>
 
             <FormField id="pincode" label="Postcode" required error={fe.pincode}
-              hint="5-digit postcode">
+              hint="Auto-filled for major cities — editable">
               <input
                 id="pincode" name="pincode" type="text"
-                defaultValue={submittedStr('pincode') ?? enquiry?.pincode}
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value)}
                 placeholder="600001"
                 maxLength={10}
                 disabled={isPending}

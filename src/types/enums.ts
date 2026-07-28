@@ -197,6 +197,8 @@ export enum ActivityAction {
   LeadStageChanged  = 'enquiry.lead_stage_changed',
   // Field visit actions
   FieldVisitLogged  = 'field_visit.logged',
+  // Voice note actions
+  VoiceNoteLogged   = 'voice_note.logged',
   // Complaint actions
   ComplaintLogged   = 'complaint.logged',
   ComplaintStatusChanged = 'complaint.status_changed',
@@ -230,6 +232,7 @@ export enum EntityType {
   Session    = 'session',
   FieldVisit = 'field_visit',
   Complaint  = 'complaint',
+  VoiceNote  = 'voice_note',
 }
 
 export enum NotificationType {

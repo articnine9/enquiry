@@ -6,6 +6,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 const FIELD_VISIT_PHOTOS_BUCKET = 'field-visit-photos'
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024 // 8 MB
 
+const ENQUIRY_VOICE_NOTES_BUCKET = 'enquiry-voice-notes'
+const MAX_AUDIO_BYTES = 5 * 1024 * 1024 // 5 MB — comfortably covers a 3-minute recording
+
 let client: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
@@ -47,5 +50,31 @@ export async function uploadFieldVisitPhoto(file: File): Promise<string> {
   if (error) throw new Error(`Photo upload failed: ${error.message}`)
 
   const { data } = supabase.storage.from(FIELD_VISIT_PHOTOS_BUCKET).getPublicUrl(path)
+  return data.publicUrl
+}
+
+/**
+ * Uploads a staff voice-report recording to Supabase Storage and returns its
+ * public URL. Path is a random UUID, not derived from user input.
+ */
+export async function uploadEnquiryVoiceNote(file: File): Promise<string> {
+  if (!file.type.startsWith('audio/')) {
+    throw new Error('Recording must be an audio file')
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    throw new Error('Recording must be smaller than 5 MB')
+  }
+
+  const supabase = getClient()
+  const ext  = (file.type.split('/')[1] || 'webm').split(';')[0].replace(/[^a-z0-9]/g, '') || 'webm'
+  const path = `${crypto.randomUUID()}.${ext}`
+
+  const { error } = await supabase.storage
+    .from(ENQUIRY_VOICE_NOTES_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false })
+
+  if (error) throw new Error(`Recording upload failed: ${error.message}`)
+
+  const { data } = supabase.storage.from(ENQUIRY_VOICE_NOTES_BUCKET).getPublicUrl(path)
   return data.publicUrl
 }

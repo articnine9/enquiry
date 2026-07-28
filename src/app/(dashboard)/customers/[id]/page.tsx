@@ -34,7 +34,7 @@ export default async function CustomerDetailPage({ params }: PageProps) {
   const complaints = complaintsResult.ok ? complaintsResult.data : []
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-5xl mx-auto space-y-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-6">
       <PageHeader
         icon={Users2}
         title={customer.name}

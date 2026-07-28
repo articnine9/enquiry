@@ -15,7 +15,7 @@ export default async function MasterDataPage() {
   await requireRole(UserRole.SuperAdmin)
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-5xl mx-auto space-y-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-6">
       <SettingsHeader
         icon={Database}
         title="Master Data"
