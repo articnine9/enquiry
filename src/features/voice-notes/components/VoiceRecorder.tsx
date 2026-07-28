@@ -1,11 +1,12 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Mic, Square, RotateCcw, Send, Loader2, Upload } from 'lucide-react'
+import { Mic, Trash2, Check, RotateCcw, Send, Loader2, Upload, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { createVoiceNoteAction, type VoiceNoteRow } from '../actions/voiceNote.actions'
 
-const MAX_SECONDS = 180
+const MAX_SECONDS  = 180
+const WAVE_BARS    = 32
 
 interface VoiceRecorderProps {
   enquiryId:  string
@@ -21,12 +22,18 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
   const [error,   setError]   = useState<string | null>(null)
   const [blob,       setBlob]       = useState<Blob | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [levels,  setLevels]  = useState<number[]>(() => Array(WAVE_BARS).fill(0.08))
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef        = useRef<Blob[]>([])
   const streamRef        = useRef<MediaStream | null>(null)
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef     = useRef<HTMLInputElement>(null)
+  const cancelledRef     = useRef(false)
+
+  const audioCtxRef  = useRef<AudioContext | null>(null)
+  const analyserRef  = useRef<AnalyserNode | null>(null)
+  const rafRef        = useRef<number | null>(null)
 
   const [state, formAction, isPending] = useActionState(createVoiceNoteAction, null)
 
@@ -43,6 +50,7 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
 
   // Release the mic / clean up on unmount
   useEffect(() => () => {
+    stopWaveform()
     if (timerRef.current) clearInterval(timerRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -53,8 +61,41 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
     setSeconds(0)
     setCaption('')
     setBlob(null)
+    setLevels(Array(WAVE_BARS).fill(0.08))
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
+  }
+
+  function startWaveform(stream: MediaStream) {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctx) return
+    const audioCtx = new Ctx()
+    const source   = audioCtx.createMediaStreamSource(stream)
+    const analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 256
+    source.connect(analyser)
+    audioCtxRef.current = audioCtx
+    analyserRef.current = analyser
+
+    const data = new Uint8Array(analyser.fftSize)
+    const tick = () => {
+      analyser.getByteTimeDomainData(data)
+      let sum = 0
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128
+        sum += v * v
+      }
+      const level = Math.min(1, Math.sqrt(sum / data.length) * 4)
+      setLevels((prev) => [...prev.slice(1), Math.max(0.08, level)])
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+  }
+
+  function stopWaveform() {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    analyserRef.current = null
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
   }
 
   async function startRecording() {
@@ -72,6 +113,7 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
+      cancelledRef.current = false
 
       const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
         .find((t) => window.MediaRecorder?.isTypeSupported?.(t)) ?? ''
@@ -80,15 +122,21 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        stopWaveform()
+        if (cancelledRef.current) {
+          reset()
+          return
+        }
         const recordedBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
         setBlob(recordedBlob)
         setPreviewUrl(URL.createObjectURL(recordedBlob))
         setPhase('preview')
-        stream.getTracks().forEach((t) => t.stop())
       }
 
       mediaRecorderRef.current = recorder
       recorder.start()
+      startWaveform(stream)
       setPhase('recording')
       setSeconds(0)
 
@@ -109,6 +157,11 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
   function stopRecording() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     mediaRecorderRef.current?.stop()
+  }
+
+  function cancelRecording() {
+    cancelledRef.current = true
+    stopRecording()
   }
 
   function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -169,23 +222,26 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
       {error && <p className="text-xs text-red-600 dark:text-red-400 mb-2">{error}</p>}
 
       {phase === 'idle' && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={startRecording}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors shadow-sm"
+            aria-label="Record work report"
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm transition-colors"
           >
-            <Mic className="w-4 h-4" />
-            Record work report
+            <Mic className="w-5 h-5" />
           </button>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload a recording
-          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Record a voice work report</p>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <Paperclip className="w-3 h-3" />
+              or attach an existing recording
+            </button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -197,21 +253,42 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
       )}
 
       {phase === 'recording' && (
-        <div className="flex items-center gap-3">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-          </span>
-          <span className="text-sm font-mono tabular-nums text-slate-700 dark:text-slate-300">
-            {mm}:{ss} / 03:00
-          </span>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={cancelRecording}
+            aria-label="Cancel recording"
+            className="flex-shrink-0 w-9 h-9 rounded-full text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+
+          <div className="flex-1 min-w-0 flex items-center gap-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 pl-3 pr-1 py-1.5">
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+            </span>
+            <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 flex-shrink-0">
+              {mm}:{ss}
+            </span>
+            <div className="flex-1 flex items-center gap-[2px] h-6 overflow-hidden">
+              {levels.map((lvl, i) => (
+                <span
+                  key={i}
+                  className="flex-1 min-w-[2px] rounded-full bg-emerald-500/70 dark:bg-emerald-400/70"
+                  style={{ height: `${Math.round(lvl * 100)}%` }}
+                />
+              ))}
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={stopRecording}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-medium transition-colors ml-auto"
+            aria-label="Finish recording"
+            className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm transition-colors"
           >
-            <Square className="w-3.5 h-3.5" />
-            Stop
+            <Check className="w-4 h-4" />
           </button>
         </div>
       )}

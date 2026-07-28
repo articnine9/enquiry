@@ -9,6 +9,7 @@
  */
 
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { castDraft } from 'immer'
 import { immer } from 'zustand/middleware/immer'
 import { FollowUpStatus } from '@/types/enums'
@@ -221,16 +222,16 @@ export const useFollowUpStore = create<FollowUpStore>()(
 // ── Selector hooks ────────────────────────────────────────────────────────────
 
 export const useFollowUpsForEnquiry = (enquiryId: string) =>
-  useFollowUpStore((s) => s.getForEnquiry(enquiryId))
+  useFollowUpStore(useShallow((s) => s.getForEnquiry(enquiryId)))
 
 export const useOpenFollowUps = (enquiryId: string) =>
-  useFollowUpStore((s) => s.getOpen(enquiryId))
+  useFollowUpStore(useShallow((s) => s.getOpen(enquiryId)))
 
 export const useNextFollowUp = (enquiryId: string) =>
   useFollowUpStore((s) => s.getNext(enquiryId))
 
 export const useFollowUpModal = () =>
-  useFollowUpStore((s) => ({ modal: s.modal, closeModal: s.closeModal }))
+  useFollowUpStore(useShallow((s) => ({ modal: s.modal, closeModal: s.closeModal })))
 
 export const useFollowUpPending = (id: string) =>
   useFollowUpStore((s) => s.pending.has(id))
