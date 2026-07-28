@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Mic, Square, RotateCcw, Send, Loader2 } from 'lucide-react'
+import { Mic, Square, RotateCcw, Send, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { createVoiceNoteAction, type VoiceNoteRow } from '../actions/voiceNote.actions'
 
@@ -26,6 +26,7 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
   const chunksRef        = useRef<Blob[]>([])
   const streamRef        = useRef<MediaStream | null>(null)
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null)
+  const fileInputRef     = useRef<HTMLInputElement>(null)
 
   const [state, formAction, isPending] = useActionState(createVoiceNoteAction, null)
 
@@ -110,6 +111,42 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
     mediaRecorderRef.current?.stop()
   }
 
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file) return
+
+    setError(null)
+    if (!file.type.startsWith('audio/')) {
+      setError('Please choose an audio file')
+      return
+    }
+
+    const url   = URL.createObjectURL(file)
+    const probe = new Audio()
+    probe.preload = 'metadata'
+    probe.src = url
+
+    const useDuration = (raw: number) => {
+      const dur = Number.isFinite(raw) ? Math.round(raw) : 0
+      if (dur > MAX_SECONDS) {
+        setError('That recording is longer than 3 minutes — please choose a shorter clip')
+        URL.revokeObjectURL(url)
+        return
+      }
+      setBlob(file)
+      setPreviewUrl(url)
+      setSeconds(Math.max(dur, 1))
+      setPhase('preview')
+    }
+
+    probe.onloadedmetadata = () => useDuration(probe.duration)
+    // Some browsers report Infinity until a seek — fall back once duration settles.
+    probe.ondurationchange = () => {
+      if (Number.isFinite(probe.duration)) useDuration(probe.duration)
+    }
+  }
+
   function handleSubmit() {
     if (!blob) return
     const ext  = (blob.type.split('/')[1] || 'webm').split(';')[0]
@@ -132,14 +169,31 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
       {error && <p className="text-xs text-red-600 dark:text-red-400 mb-2">{error}</p>}
 
       {phase === 'idle' && (
-        <button
-          type="button"
-          onClick={startRecording}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors shadow-sm"
-        >
-          <Mic className="w-4 h-4" />
-          Record work report
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={startRecording}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors shadow-sm"
+          >
+            <Mic className="w-4 h-4" />
+            Record work report
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Upload a recording
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
+        </div>
       )}
 
       {phase === 'recording' && (
