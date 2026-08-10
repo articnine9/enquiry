@@ -7,13 +7,15 @@ import type { VoiceNoteRow } from '../actions/voiceNote.actions'
 import { formatDateTime } from '@/lib/utils'
 
 interface VoiceNoteTimelineProps {
-  enquiryId:    string
+  enquiryId?:   string
+  complaintId?: string
   initialItems: VoiceNoteRow[]
   canRecord?:   boolean
 }
 
 export default function VoiceNoteTimeline({
   enquiryId,
+  complaintId,
   initialItems,
   canRecord = true,
 }: VoiceNoteTimelineProps) {
@@ -25,7 +27,9 @@ export default function VoiceNoteTimeline({
 
   return (
     <div className="space-y-4">
-      {canRecord && <VoiceRecorder enquiryId={enquiryId} onRecorded={handleRecorded} />}
+      {canRecord && (
+        <VoiceRecorder enquiryId={enquiryId} complaintId={complaintId} onRecorded={handleRecorded} />
+      )}
 
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700">

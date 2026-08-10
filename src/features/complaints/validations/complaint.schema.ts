@@ -40,7 +40,8 @@ export const CreateComplaintSchema = z.object({
     .min(5,    'Description must be at least 5 characters')
     .max(3000, 'Description cannot exceed 3000 characters'),
 
-  enquiryId: objectId.optional().nullable().transform((v) => v || undefined),
+  enquiryId:     objectId.optional().nullable().transform((v) => v || undefined),
+  distributorId: objectId.optional().nullable().transform((v) => v || undefined),
 })
 
 export type CreateComplaintInput = z.infer<typeof CreateComplaintSchema>

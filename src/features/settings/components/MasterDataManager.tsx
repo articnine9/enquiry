@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from 'react'
 import { Plus, Edit2, ToggleLeft, ToggleRight, Trash2, Loader2, X, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Combobox } from '@/components/forms/Combobox'
 import {
   MASTER_DATA_TYPES,
   MASTER_DATA_TYPE_LABELS,
@@ -124,11 +125,17 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
 
             {parentType && (
               <div className="col-span-2">
-                <label className={LABEL}>Parent Category *</label>
-                <select required value={form.parentCode} onChange={(e) => set('parentCode', e.target.value)} className={INPUT}>
-                  <option value="">Select…</option>
-                  {parentOptions.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-                </select>
+                <label className={LABEL}>Parent {MASTER_DATA_TYPE_LABELS[parentType]} *</label>
+                <Combobox
+                  id="parentCode"
+                  name="parentCode"
+                  options={parentOptions.map((p) => ({ value: p.code, label: p.label }))}
+                  value={form.parentCode}
+                  onChange={(v) => set('parentCode', v)}
+                  placeholder={`Select ${MASTER_DATA_TYPE_LABELS[parentType].toLowerCase()}…`}
+                  searchPlaceholder="Search…"
+                  emptyText="No options found"
+                />
               </div>
             )}
 
@@ -183,6 +190,8 @@ export default function MasterDataManager() {
   const [editing,   setEditing]     = useState<MasterDataRow | null | 'new'>(null)
   const [error,     setError]       = useState<string | null>(null)
   const [parentLabels, setParentLabels] = useState<Record<string, string>>({})
+  const [parentRows,   setParentRows]   = useState<MasterDataRow[]>([])
+  const [filterParentCode, setFilterParentCode] = useState('')
 
   const parentType = MASTER_DATA_PARENT_TYPE[activeType]
 
@@ -195,14 +204,19 @@ export default function MasterDataManager() {
     setIsLoading(false)
   }
 
-  useEffect(() => { reload() }, [activeType]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setFilterParentCode(''); reload() }, [activeType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!parentType) { setParentLabels({}); return }
+    if (!parentType) { setParentLabels({}); setParentRows([]); return }
     getMasterDataAction(parentType).then((r) => {
-      if (r.ok) setParentLabels(Object.fromEntries(r.data.map((p) => [p.code, p.label])))
+      if (r.ok) {
+        setParentLabels(Object.fromEntries(r.data.map((p) => [p.code, p.label])))
+        setParentRows(r.data)
+      }
     })
   }, [parentType])
+
+  const visibleRows = filterParentCode ? rows.filter((r) => r.parentCode === filterParentCode) : rows
 
   async function handleToggle(id: string, current: boolean) {
     await toggleMasterDataActiveAction(id, !current)
@@ -247,7 +261,21 @@ export default function MasterDataManager() {
       )}
 
       {/* Toolbar */}
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {parentType ? (
+          <div className="w-64">
+            <Combobox
+              id="filterParentCode"
+              name="filterParentCode"
+              options={parentRows.map((p) => ({ value: p.code, label: p.label }))}
+              value={filterParentCode}
+              onChange={setFilterParentCode}
+              placeholder={`Filter by ${MASTER_DATA_TYPE_LABELS[parentType].toLowerCase()}…`}
+              searchPlaceholder="Search…"
+              emptyText="No options found"
+            />
+          </div>
+        ) : <div />}
         <button
           type="button"
           onClick={() => setEditing('new')}
@@ -266,7 +294,7 @@ export default function MasterDataManager() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Label</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Code</th>
               {isPriority && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Colour / Weight</th>}
-              {parentType && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Parent Category</th>}
+              {parentType && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Parent {MASTER_DATA_TYPE_LABELS[parentType]}</th>}
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Order</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
               <th className="w-24" />
@@ -283,13 +311,13 @@ export default function MasterDataManager() {
                   ))}
                 </tr>
               ))
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="py-12 text-center text-slate-400 text-sm">
-                  No options yet. Add your first option.
+                  {filterParentCode ? 'No options under this filter.' : 'No options yet. Add your first option.'}
                 </td>
               </tr>
-            ) : rows.map((row) => (
+            ) : visibleRows.map((row) => (
               <tr key={row._id} className={cn('hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors', !row.isActive && 'opacity-60')}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

@@ -1,13 +1,14 @@
 import { Schema, model, models, type Model, type Types } from 'mongoose'
 
 // ─── VoiceNote ────────────────────────────────────────────────────────────────
-// A short spoken work-report a staff member records against an Enquiry.
-// Visible to everyone with access to the enquiry (staff + managers) — a
-// shared audio log, not a private note.
+// A short spoken work-report a staff member records against an Enquiry or a
+// Complaint (exactly one of the two). Visible to everyone with access to the
+// parent record (staff + managers) — a shared audio log, not a private note.
 
 export interface IVoiceNote {
   _id:             Types.ObjectId
-  enquiryId:       Types.ObjectId          // ref Enquiry
+  enquiryId?:      Types.ObjectId | null    // ref Enquiry — set when attached to an enquiry
+  complaintId?:    Types.ObjectId | null    // ref Complaint — set when attached to a complaint
   recordedBy:      Types.ObjectId          // ref User — who recorded it
   audioUrl:        string
   durationSeconds: number
@@ -21,10 +22,16 @@ export type VoiceNoteDocument = IVoiceNote
 const VoiceNoteSchema = new Schema<VoiceNoteDocument>(
   {
     enquiryId: {
-      type:     Schema.Types.ObjectId,
-      ref:      'Enquiry',
-      required: [true, 'Enquiry reference is required'],
-      index:    true,
+      type:    Schema.Types.ObjectId,
+      ref:     'Enquiry',
+      default: null,
+      index:   true,
+    },
+    complaintId: {
+      type:    Schema.Types.ObjectId,
+      ref:     'Complaint',
+      default: null,
+      index:   true,
     },
     recordedBy: {
       type:     Schema.Types.ObjectId,
@@ -53,9 +60,20 @@ const VoiceNoteSchema = new Schema<VoiceNoteDocument>(
   }
 )
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+VoiceNoteSchema.pre('validate', function (next) {
+  if (!this.enquiryId === !this.complaintId) {
+    next(new Error('A voice note must be attached to exactly one of enquiryId or complaintId'))
+    return
+  }
+  next()
+})
+
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
 VoiceNoteSchema.index({ enquiryId: 1, createdAt: -1 })
+VoiceNoteSchema.index({ complaintId: 1, createdAt: -1 })
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 

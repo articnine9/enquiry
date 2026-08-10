@@ -17,7 +17,8 @@ function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
 export interface VoiceNoteRow {
   _id:             string
-  enquiryId:       string
+  enquiryId?:      string
+  complaintId?:    string
   recordedBy:      string
   recordedByName?: string
   audioUrl:        string
@@ -33,7 +34,8 @@ function mapRow(v: Record<string, unknown>): VoiceNoteRow {
 
   return {
     _id:             String(v._id),
-    enquiryId:       String(v.enquiryId),
+    enquiryId:       v.enquiryId ? String(v.enquiryId) : undefined,
+    complaintId:     v.complaintId ? String(v.complaintId) : undefined,
     recordedBy:      String(staff?._id ?? v.recordedBy ?? ''),
     recordedByName:  staff?.name,
     audioUrl:        String(v.audioUrl),
@@ -54,7 +56,8 @@ export async function createVoiceNoteAction(
     await dbConnect()
 
     const raw = {
-      enquiryId:       formData.get('enquiryId'),
+      enquiryId:       formData.get('enquiryId') || undefined,
+      complaintId:     formData.get('complaintId') || undefined,
       durationSeconds: formData.get('durationSeconds'),
       caption:         formData.get('caption') || undefined,
     }
@@ -81,7 +84,8 @@ export async function createVoiceNoteAction(
     }
 
     const note = await VoiceNote.create({
-      enquiryId:       parsed.data.enquiryId,
+      enquiryId:       parsed.data.enquiryId ?? null,
+      complaintId:     parsed.data.complaintId ?? null,
       durationSeconds: parsed.data.durationSeconds,
       caption:         parsed.data.caption,
       recordedBy:      session.user.id,
@@ -94,10 +98,11 @@ export async function createVoiceNoteAction(
       action:     ActivityAction.VoiceNoteLogged,
       entityType: EntityType.VoiceNote,
       entityId:   note._id,
-      metadata:   { enquiryId: parsed.data.enquiryId, durationSeconds: parsed.data.durationSeconds },
+      metadata:   { enquiryId: parsed.data.enquiryId, complaintId: parsed.data.complaintId, durationSeconds: parsed.data.durationSeconds },
     })
 
-    revalidateTag(CACHE_TAGS.voiceNotes(parsed.data.enquiryId))
+    if (parsed.data.enquiryId) revalidateTag(CACHE_TAGS.voiceNotes(parsed.data.enquiryId))
+    if (parsed.data.complaintId) revalidateTag(CACHE_TAGS.voiceNotesComplaint(parsed.data.complaintId))
 
     await note.populate(POPULATE)
 
@@ -115,6 +120,22 @@ export async function getVoiceNotesForEnquiry(enquiryId: string): Promise<Action
     await dbConnect()
 
     const docs = await VoiceNote.find({ enquiryId })
+      .sort({ createdAt: -1 })
+      .populate(POPULATE)
+      .lean()
+
+    return { ok: true, data: toPlain(docs.map((d) => mapRow(d as unknown as Record<string, unknown>))) }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+export async function getVoiceNotesForComplaint(complaintId: string): Promise<ActionResult<VoiceNoteRow[]>> {
+  try {
+    await requirePermission('voicenote:read')
+    await dbConnect()
+
+    const docs = await VoiceNote.find({ complaintId })
       .sort({ createdAt: -1 })
       .populate(POPULATE)
       .lean()

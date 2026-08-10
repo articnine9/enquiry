@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { getComplaintAction } from '@/features/complaints/actions/complaint.actions'
 import ComplaintTypeBadge from '@/features/complaints/components/ComplaintTypeBadge'
 import ComplaintStatusTracker from '@/features/complaints/components/ComplaintStatusTracker'
+import VoiceNoteSection from '@/features/voice-notes/components/VoiceNoteSection'
 import { formatDate } from '@/lib/utils'
 import type { Metadata } from 'next'
 
@@ -103,6 +104,14 @@ export default async function ComplaintDetailPage({ params }: PageProps) {
             )}
           </div>
         )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <p className="text-xs font-medium text-slate-400 mb-3">Voice Work Reports</p>
+        <VoiceNoteSection
+          complaintId={complaint._id}
+          canRecord={complaint.status !== 'closed'}
+        />
       </div>
     </div>
   )

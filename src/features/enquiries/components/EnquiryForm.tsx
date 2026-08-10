@@ -8,18 +8,40 @@ import { createEnquiry, updateEnquiry } from '../actions/enquiry.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
 import { Combobox } from '@/components/forms/Combobox'
 import { SubmitButton } from '@/components/forms/SubmitButton'
-import { getDistrictOptions, getCityOptions, getKnownPincode } from '@/lib/data/southIndiaDistricts'
 import { cn } from '@/lib/utils'
 import type { MasterOption, MasterSubOption } from '@/features/settings/services/masterData.service'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
 
 export interface EnquiryFormOptions {
   sources:    MasterOption[]
-  categories: MasterOption[]
-  products:   MasterOption[]
+  categories: MasterSubOption[]
+  products:   MasterSubOption[]
   priorities: MasterOption[]
   businessCategories:    MasterOption[]
   businessSubCategories: MasterSubOption[]
+  states:    MasterOption[]
+  districts: MasterSubOption[]
+  cities:    MasterSubOption[]
+  pincodes:  MasterSubOption[]
+}
+
+/** Keeps a legacy/orphaned current value visible in a filtered dropdown even if
+ * it doesn't (yet) belong to the selected parent — avoids a confusing blank
+ * select for enquiries created before Product/Category were scoped. */
+function withCurrent(filtered: MasterSubOption[], all: MasterSubOption[], current: string): MasterSubOption[] {
+  if (!current || filtered.some((o) => o.value === current)) return filtered
+  const existing = all.find((o) => o.value === current)
+  return existing ? [existing, ...filtered] : filtered
+}
+
+/** Code of the option whose label matches `label`, preferring one scoped to `parentCode`. */
+function findCodeByLabel(opts: MasterSubOption[] | MasterOption[], label: string | undefined, parentCode?: string): string {
+  if (!label) return ''
+  if (parentCode !== undefined) {
+    const scoped = (opts as MasterSubOption[]).find((o) => o.label === label && o.parentCode === parentCode)
+    if (scoped) return scoped.value
+  }
+  return opts.find((o) => o.label === label)?.value ?? ''
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -85,7 +107,7 @@ export default function EnquiryForm({
   // ── Select options (from MasterData) ─────────────────────────────────────────
 
   const { sources: sourceOptions, priorities: priorityOptions,
-          products: productOptions, categories: categoryOptions,
+          products: allProductOptions, categories: allCategoryOptions,
           businessCategories: businessCategoryOptions, businessSubCategories: allBusinessSubCategoryOptions } = options
 
   // Default selection: prefer a just-submitted (failed) value, then the existing
@@ -93,32 +115,63 @@ export default function EnquiryForm({
   const defaultOf = (opts: MasterOption[], key: string, current?: string) =>
     submittedStr(key) ?? current ?? opts[0]?.value ?? ''
 
-  // ── District → City dependent dropdowns (South India dataset) ────────────────
+  // ── State → District → City → Pincode dependent dropdowns (MasterData) ──────
+  // Comboboxes are keyed by MasterData *code* internally (so parentCode
+  // filtering works); the actual district/city/pincode text stored on the
+  // enquiry is the *label*, unchanged from before — staff auto-assignment
+  // zone-matching keys off that exact label text.
 
-  const districtOptions = useMemo(() => getDistrictOptions(), [])
-  const [district, setDistrict] = useState(enquiry?.district ?? '')
-  const [city,     setCity]     = useState(enquiry?.city ?? '')
-  const [pincode,  setPincode]  = useState(submittedStr('pincode') ?? enquiry?.pincode ?? '')
-  const cityOptions = useMemo(() => getCityOptions(district), [district])
+  const [stateCode,    setStateCodeRaw]    = useState(
+    submittedStr('stateCode') ?? findCodeByLabel(options.states, enquiry?.state)
+  )
+  const [districtCode, setDistrictCodeRaw] = useState(
+    submittedStr('districtCode') ?? findCodeByLabel(options.districts, enquiry?.district, stateCode)
+  )
+  const [cityCode,     setCityCodeRaw]     = useState(
+    submittedStr('cityCode') ?? findCodeByLabel(options.cities, enquiry?.city, districtCode)
+  )
+  const [pincodeCode,  setPincodeCode]     = useState(
+    submittedStr('pincodeCode') ?? findCodeByLabel(options.pincodes, enquiry?.pincode, cityCode)
+  )
 
-  function handleDistrictChange(next: string) {
-    setDistrict(next)
-    // Clear the city whenever it no longer belongs to the selected district
-    const stillValid = getCityOptions(next).some((c) => c.value === city)
-    if (!stillValid) setCity('')
+  const stateOptions    = useMemo(() => options.states.map((s) => ({ value: s.value, label: s.label })), [options.states])
+  const districtOptions = useMemo(
+    () => options.districts.filter((d) => d.parentCode === stateCode).map((d) => ({ value: d.value, label: d.label })),
+    [options.districts, stateCode]
+  )
+  const cityOptions = useMemo(
+    () => options.cities.filter((c) => c.parentCode === districtCode).map((c) => ({ value: c.value, label: c.label })),
+    [options.cities, districtCode]
+  )
+  const pincodeOptions = useMemo(
+    () => options.pincodes.filter((p) => p.parentCode === cityCode).map((p) => ({ value: p.value, label: p.label })),
+    [options.pincodes, cityCode]
+  )
+
+  const stateLabel    = options.states.find((s) => s.value === stateCode)?.label ?? ''
+  const districtLabel = options.districts.find((d) => d.value === districtCode)?.label ?? ''
+  const cityLabel      = options.cities.find((c) => c.value === cityCode)?.label ?? ''
+  const pincodeLabel   = options.pincodes.find((p) => p.value === pincodeCode)?.label ?? ''
+
+  function setStateCode(next: string) {
+    setStateCodeRaw(next)
+    const stillValid = options.districts.some((d) => d.parentCode === next && d.value === districtCode)
+    if (!stillValid) { setDistrictCodeRaw(''); setCityCodeRaw(''); setPincodeCode('') }
   }
 
-  function handleCityChange(next: string) {
-    setCity(next)
-    // Auto-fill pincode for known major cities, but never clobber something
-    // the user already typed.
-    if (!pincode) {
-      const known = getKnownPincode(district, next)
-      if (known) setPincode(known)
-    }
+  function setDistrictCode(next: string) {
+    setDistrictCodeRaw(next)
+    const stillValid = options.cities.some((c) => c.parentCode === next && c.value === cityCode)
+    if (!stillValid) { setCityCodeRaw(''); setPincodeCode('') }
   }
 
-  // ── Business Category → Sub-category dependent dropdowns ────────────────────
+  function setCityCode(next: string) {
+    setCityCodeRaw(next)
+    const stillValid = options.pincodes.some((p) => p.parentCode === next && p.value === pincodeCode)
+    if (!stillValid) setPincodeCode('')
+  }
+
+  // ── Business Category → Product / Category / Sub-category dependents ────────
 
   const [businessCategory, setBusinessCategory] = useState(
     submittedStr('businessCategory') ?? enquiry?.businessCategory ?? ''
@@ -126,15 +179,33 @@ export default function EnquiryForm({
   const [businessSubCategory, setBusinessSubCategory] = useState(
     submittedStr('businessSubCategory') ?? enquiry?.businessSubCategory ?? ''
   )
+  const [product, setProduct] = useState(submittedStr('product') ?? enquiry?.product ?? '')
+  const [category, setCategory] = useState(submittedStr('category') ?? enquiry?.category ?? '')
+
   const businessSubCategoryOptions = useMemo(
     () => allBusinessSubCategoryOptions.filter((o) => o.parentCode === businessCategory),
     [allBusinessSubCategoryOptions, businessCategory]
   )
+  const productOptions = useMemo(
+    () => withCurrent(allProductOptions.filter((o) => o.parentCode === businessCategory), allProductOptions, product),
+    [allProductOptions, businessCategory, product]
+  )
+  const categoryOptions = useMemo(
+    () => withCurrent(allCategoryOptions.filter((o) => o.parentCode === businessCategory), allCategoryOptions, category),
+    [allCategoryOptions, businessCategory, category]
+  )
 
   function handleBusinessCategoryChange(next: string) {
     setBusinessCategory(next)
-    const stillValid = allBusinessSubCategoryOptions.some((o) => o.parentCode === next && o.value === businessSubCategory)
-    if (!stillValid) setBusinessSubCategory('')
+    if (!allBusinessSubCategoryOptions.some((o) => o.parentCode === next && o.value === businessSubCategory)) {
+      setBusinessSubCategory('')
+    }
+    if (!allProductOptions.some((o) => o.parentCode === next && o.value === product)) {
+      setProduct('')
+    }
+    if (!allCategoryOptions.some((o) => o.parentCode === next && o.value === category)) {
+      setCategory('')
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -195,47 +266,73 @@ export default function EnquiryForm({
             />
           </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <FormField id="district" label="District" required error={fe.district}>
+          {/* Submitted district/city/pincode/state are the resolved *labels* —
+              staff auto-assignment zone-matching keys off that exact text. */}
+          <input type="hidden" name="state"    value={stateLabel} />
+          <input type="hidden" name="district" value={districtLabel} />
+          <input type="hidden" name="city"     value={cityLabel} />
+          <input type="hidden" name="pincode"  value={pincodeLabel} />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <FormField id="stateCode" label="State" required error={fe.state}>
               <Combobox
-                id="district" name="district"
+                id="stateCode" name="stateCode"
+                options={stateOptions}
+                value={stateCode}
+                onChange={setStateCode}
+                placeholder="Select state"
+                searchPlaceholder="Search state…"
+                emptyText="No state found — add one in Settings › Master Data"
+                disabled={isPending}
+                hasError={!!fe.state}
+              />
+            </FormField>
+
+            <FormField id="districtCode" label="District" required error={fe.district}
+              hint={!stateCode ? 'Select a state first' : undefined}>
+              <Combobox
+                id="districtCode" name="districtCode"
                 options={districtOptions}
-                value={district}
-                onChange={handleDistrictChange}
+                value={districtCode}
+                onChange={setDistrictCode}
                 placeholder="Select district"
                 searchPlaceholder="Search district…"
                 emptyText="No district found"
-                disabled={isPending}
+                disabled={isPending || !stateCode}
+                disabledHint={!stateCode ? 'Select a state first' : undefined}
                 hasError={!!fe.district}
               />
             </FormField>
 
-            <FormField id="city" label="City" required error={fe.city}
-              hint={!district ? 'Select a district first' : undefined}>
+            <FormField id="cityCode" label="City" required error={fe.city}
+              hint={!districtCode ? 'Select a district first' : undefined}>
               <Combobox
-                id="city" name="city"
+                id="cityCode" name="cityCode"
                 options={cityOptions}
-                value={city}
-                onChange={handleCityChange}
+                value={cityCode}
+                onChange={setCityCode}
                 placeholder="Select city"
                 searchPlaceholder="Search city…"
                 emptyText="No city found"
-                disabled={isPending || !district}
-                disabledHint={!district ? 'Select a district first' : undefined}
+                disabled={isPending || !districtCode}
+                disabledHint={!districtCode ? 'Select a district first' : undefined}
                 hasError={!!fe.city}
               />
             </FormField>
 
-            <FormField id="pincode" label="Postcode" required error={fe.pincode}
-              hint="Auto-filled for major cities — editable">
-              <input
-                id="pincode" name="pincode" type="text"
-                value={pincode}
-                onChange={(e) => setPincode(e.target.value)}
-                placeholder="600001"
-                maxLength={10}
-                disabled={isPending}
-                className={inputClass(!!fe.pincode)}
+            <FormField id="pincodeCode" label="Pincode" error={fe.pincode}
+              hint={!cityCode ? 'Select a city first' : 'Optional — add missing pincodes in Settings › Master Data'}>
+              <Combobox
+                id="pincodeCode" name="pincodeCode"
+                options={pincodeOptions}
+                value={pincodeCode}
+                onChange={setPincodeCode}
+                placeholder="Select pincode"
+                searchPlaceholder="Search pincode…"
+                emptyText="No pincode found"
+                disabled={isPending || !cityCode}
+                disabledHint={!cityCode ? 'Select a city first' : undefined}
+                hasError={!!fe.pincode}
               />
             </FormField>
           </div>
@@ -271,45 +368,6 @@ export default function EnquiryForm({
             </select>
           </FormField>
 
-          <FormField id="product" label="Product / Service" required error={fe.product}>
-            <select
-              id="product" name="product"
-              defaultValue={defaultOf(productOptions, 'product', enquiry?.product)}
-              disabled={isPending}
-              className={selectClass(!!fe.product)}
-            >
-              {productOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField id="category" label="Category" required error={fe.category}>
-            <select
-              id="category" name="category"
-              defaultValue={defaultOf(categoryOptions, 'category', enquiry?.category)}
-              disabled={isPending}
-              className={selectClass(!!fe.category)}
-            >
-              {categoryOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField id="priority" label="Priority" required error={fe.priority}>
-            <select
-              id="priority" name="priority"
-              defaultValue={defaultOf(priorityOptions, 'priority', enquiry?.priority)}
-              disabled={isPending}
-              className={selectClass(!!fe.priority)}
-            >
-              {priorityOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </FormField>
-
           <FormField id="businessCategory" label="Business Category" required error={fe.businessCategory}>
             <select
               id="businessCategory" name="businessCategory"
@@ -325,10 +383,10 @@ export default function EnquiryForm({
             </select>
           </FormField>
 
-          <FormField id="businessSubCategory" label="Sub-Category" required error={fe.businessSubCategory}
+          <FormField id="businessSubCategoryTop" label="Sub-Category" required error={fe.businessSubCategory}
             hint={!businessCategory ? 'Select a business category first' : undefined}>
             <select
-              id="businessSubCategory" name="businessSubCategory"
+              id="businessSubCategoryTop" name="businessSubCategory"
               value={businessSubCategory}
               onChange={(e) => setBusinessSubCategory(e.target.value)}
               disabled={isPending || !businessCategory}
@@ -336,6 +394,51 @@ export default function EnquiryForm({
             >
               <option value="">Select sub-category…</option>
               {businessSubCategoryOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="product" label="Product / Service" required error={fe.product}
+            hint={!businessCategory ? 'Select a business category first' : undefined}>
+            <select
+              id="product" name="product"
+              value={product}
+              onChange={(e) => setProduct(e.target.value)}
+              disabled={isPending || !businessCategory}
+              className={selectClass(!!fe.product)}
+            >
+              <option value="">Select product…</option>
+              {productOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="category" label="Category" required error={fe.category}
+            hint={!businessCategory ? 'Select a business category first' : undefined}>
+            <select
+              id="category" name="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={isPending || !businessCategory}
+              className={selectClass(!!fe.category)}
+            >
+              <option value="">Select category…</option>
+              {categoryOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField id="priority" label="Priority" required error={fe.priority}>
+            <select
+              id="priority" name="priority"
+              defaultValue={defaultOf(priorityOptions, 'priority', enquiry?.priority)}
+              disabled={isPending}
+              className={selectClass(!!fe.priority)}
+            >
+              {priorityOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>

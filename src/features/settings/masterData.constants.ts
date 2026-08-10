@@ -9,6 +9,10 @@ export const MASTER_DATA_TYPES = [
   'enquiry_priority',
   'business_category',
   'business_subcategory',
+  'state',
+  'district',
+  'city',
+  'pincode',
 ] as const
 
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number]
@@ -20,10 +24,19 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
   enquiry_priority:      'Priority',
   business_category:     'Business Category',
   business_subcategory:  'Business Sub-Category',
+  state:                 'State',
+  district:              'District',
+  city:                  'City',
+  pincode:               'Pincode',
 }
 
 // Types where each row belongs under a parent row of another type — the admin
 // CRUD form shows a parent picker for these instead of a flat list.
 export const MASTER_DATA_PARENT_TYPE: Partial<Record<MasterDataType, MasterDataType>> = {
   business_subcategory: 'business_category',
+  enquiry_product:      'business_category',
+  enquiry_category:     'business_category',
+  district:             'state',
+  city:                 'district',
+  pincode:              'city',
 }

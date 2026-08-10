@@ -19,9 +19,16 @@ export interface IEnquiry {
   phone:         string
   email?:        string
   address:       string
+  // Added after existing enquiries were created — optional at the schema level
+  // so legacy docs without it still save; required for new/edited ones via Zod
+  // at the action layer, same pattern as businessCategory below.
+  state?:        string
   city:          string
   district:      string
-  pincode:       string
+  // Now sourced from a cascading City → Pincode master-data list rather than
+  // free text; optional because coverage is admin-curated and won't be
+  // complete for every city from day one.
+  pincode?:      string
   location:      string          // area / locality free-text
 
   // Enquiry meta
@@ -183,6 +190,11 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       trim:      true,
       maxlength: [300, 'Address cannot exceed 300 characters'],
     },
+    state: {
+      type:      String,
+      trim:      true,
+      maxlength: [100, 'State cannot exceed 100 characters'],
+    },
     city: {
       type:      String,
       required:  [true, 'City is required'],
@@ -196,10 +208,10 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       maxlength: [100, 'District cannot exceed 100 characters'],
     },
     pincode: {
-      type:     String,
-      required: [true, 'Pincode is required'],
-      trim:     true,
-      match:    [/^\d{5,10}$/, 'Pincode must be 5–10 digits'],
+      type:  String,
+      trim:  true,
+      match: [/^\d{5,10}$/, 'Pincode must be 5–10 digits'],
+      default: undefined,
     },
     location: {
       type:      String,

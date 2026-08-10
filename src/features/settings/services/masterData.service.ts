@@ -65,21 +65,35 @@ export async function getMasterSubOptions(type: MasterDataType): Promise<MasterS
 /** All active option sets for the enquiry form, in one round of caching. */
 export async function getEnquiryFormOptions(): Promise<{
   sources:            MasterOption[]
-  categories:         MasterOption[]
-  products:           MasterOption[]
+  categories:         MasterSubOption[]
+  products:           MasterSubOption[]
   priorities:         MasterOption[]
   businessCategories: MasterOption[]
   businessSubCategories: MasterSubOption[]
+  states:    MasterOption[]
+  districts: MasterSubOption[]
+  cities:    MasterSubOption[]
+  pincodes:  MasterSubOption[]
 }> {
-  const [sources, categories, products, priorities, businessCategories, businessSubCategories] = await Promise.all([
+  const [
+    sources, categories, products, priorities, businessCategories, businessSubCategories,
+    states, districts, cities, pincodes,
+  ] = await Promise.all([
     getMasterOptions('enquiry_source'),
-    getMasterOptions('enquiry_category'),
-    getMasterOptions('enquiry_product'),
+    getMasterSubOptions('enquiry_category'),
+    getMasterSubOptions('enquiry_product'),
     getMasterOptions('enquiry_priority'),
     getMasterOptions('business_category'),
     getMasterSubOptions('business_subcategory'),
+    getMasterOptions('state'),
+    getMasterSubOptions('district'),
+    getMasterSubOptions('city'),
+    getMasterSubOptions('pincode'),
   ])
-  return { sources, categories, products, priorities, businessCategories, businessSubCategories }
+  return {
+    sources, categories, products, priorities, businessCategories, businessSubCategories,
+    states, districts, cities, pincodes,
+  }
 }
 
 /** code → label map (includes inactive) for rendering stored enquiry values. */

@@ -5,7 +5,8 @@ const objectId = z
   .regex(/^[a-f\d]{24}$/i, 'Invalid ID format')
 
 export const CreateVoiceNoteSchema = z.object({
-  enquiryId: objectId,
+  enquiryId:   objectId.optional().nullable().transform((v) => v || undefined),
+  complaintId: objectId.optional().nullable().transform((v) => v || undefined),
 
   durationSeconds: z.coerce
     .number({ required_error: 'Duration is required' })
@@ -19,6 +20,9 @@ export const CreateVoiceNoteSchema = z.object({
     .max(500, 'Caption cannot exceed 500 characters')
     .optional()
     .transform((v) => v || undefined),
+}).refine((d) => !!d.enquiryId !== !!d.complaintId, {
+  message: 'Exactly one of enquiryId or complaintId is required',
+  path:    ['enquiryId'],
 })
 
 export type CreateVoiceNoteInput = z.infer<typeof CreateVoiceNoteSchema>

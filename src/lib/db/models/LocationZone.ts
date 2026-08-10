@@ -48,6 +48,13 @@ const LocationZoneSchema = new Schema<LocationZoneDocument>(
       default: [],
       set:     (v: string[]) => v.map((s) => s.trim().toLowerCase()),
     },
+    // Admin convenience only — picking a state auto-fills districts/cities
+    // above from it. zone-matcher's own lookups never read this field.
+    states: {
+      type:    [String],
+      default: [],
+      set:     (v: string[]) => v.map((s) => s.trim().toLowerCase()),
+    },
 
     maxCapacity: {
       type:    Number,

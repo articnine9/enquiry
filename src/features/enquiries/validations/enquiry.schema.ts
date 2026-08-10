@@ -23,10 +23,15 @@ const emailField = z
   .optional()
   .or(z.literal(''))
 
+// Optional — sourced from a cascading City → Pincode master-data list, which
+// won't have coverage for every city from day one.
 const pincodeField = z
-  .string({ required_error: 'Pincode is required' })
+  .string()
   .trim()
   .regex(/^\d{5,10}$/, 'Pincode must be 5–10 digits')
+  .optional()
+  .or(z.literal(''))
+  .transform((v) => v || undefined)
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +49,11 @@ export const CreateEnquirySchema = z.object({
     .trim()
     .min(5,   'Address must be at least 5 characters')
     .max(300, 'Address cannot exceed 300 characters'),
+  state: z
+    .string({ required_error: 'State is required' })
+    .trim()
+    .min(2,   'State must be at least 2 characters')
+    .max(100, 'State cannot exceed 100 characters'),
   city: z
     .string({ required_error: 'City is required' })
     .trim()

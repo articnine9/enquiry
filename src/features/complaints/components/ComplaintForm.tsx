@@ -1,10 +1,11 @@
 'use client'
 
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Save } from 'lucide-react'
 import { createComplaintAction, type ComplaintRow } from '../actions/complaint.actions'
+import { getDistributorOptionsAction, type OptionRow } from '@/features/field-visits/actions/fieldVisit.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { cn } from '@/lib/utils'
@@ -29,6 +30,11 @@ export default function ComplaintForm() {
   const fe = !state?.ok && state?.fieldErrors ? state.fieldErrors : {}
   const values = !state?.ok ? state?.values as Record<string, unknown> | undefined : undefined
   const str = (key: string) => typeof values?.[key] === 'string' ? (values[key] as string) : undefined
+
+  const [distributors, setDistributors] = useState<OptionRow[]>([])
+  useEffect(() => {
+    getDistributorOptionsAction().then((r) => { if (r.ok) setDistributors(r.data) })
+  }, [])
 
   useEffect(() => {
     if (state?.ok) {
@@ -80,6 +86,20 @@ export default function ComplaintForm() {
             defaultValue={str('complaintDate') ?? todayLocal()}
             className={inputClass(!!fe.complaintDate)}
           />
+        </FormField>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <FormField id="distributorId" label="Distributor" error={fe.distributorId}
+          hint="Optional — auto-filled from the customer's record if left blank">
+          <select
+            id="distributorId" name="distributorId"
+            defaultValue={str('distributorId') ?? ''}
+            className={selectClass(!!fe.distributorId)}
+          >
+            <option value="">Select distributor…</option>
+            {distributors.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
         </FormField>
       </div>
 

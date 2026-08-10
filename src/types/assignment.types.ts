@@ -32,6 +32,9 @@ export interface ILocationZone {
   pincodes:    string[]        // exact matches, e.g. ["50000","50480"]
   districts:   string[]        // normalised lowercase, e.g. ["cheras","ampang"]
   cities:      string[]        // normalised lowercase, e.g. ["kuala lumpur"]
+  states:      string[]        // normalised lowercase — admin convenience: picking a
+                                // state auto-fills districts/cities above from it,
+                                // not used by zone-matcher's own lookups
   maxCapacity: number          // total concurrent enquiries the zone handles
   isActive:    boolean
   managerId?:  Types.ObjectId  // optional zone manager (User ref)

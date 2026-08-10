@@ -8,6 +8,7 @@ import Dealer from '@/lib/db/models/Dealer'
 import ActivityLog from '@/lib/db/models/ActivityLog'
 import { requireSession, requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { uploadFieldVisitPhoto } from '@/lib/storage/supabase'
+import { getMasterOptions, type MasterOption } from '@/features/settings/services/masterData.service'
 import { CACHE_TAGS } from '@/lib/cache'
 import { ActivityAction, EntityType, UserRole, VISIT_TYPE_LABELS } from '@/types/enums'
 import { CreateFieldVisitSchema, FieldVisitFilterSchema } from '../validations/fieldVisit.schema'
@@ -27,6 +28,7 @@ export interface FieldVisitRow {
   visitType:        string
   customerName:     string
   notes?:           string
+  businessCategory?: string
   enquiryId?:       string
   enquiryNo?:       string
   distributorId?:   string
@@ -60,6 +62,7 @@ function mapRow(v: Record<string, unknown>): FieldVisitRow {
     visitType:        String(v.visitType),
     customerName:     String(v.customerName),
     notes:            v.notes as string | undefined,
+    businessCategory: (v.businessCategory as string | null | undefined) ?? undefined,
     enquiryId:        enquiry?._id ? String(enquiry._id) : (v.enquiryId ? String(v.enquiryId) : undefined),
     enquiryNo:        enquiry?.enquiryNo,
     distributorId:    distributor?._id ? String(distributor._id) : (v.distributorId ? String(v.distributorId) : undefined),
@@ -88,6 +91,7 @@ export async function createFieldVisitAction(
       visitType:     formData.get('visitType'),
       customerName:  formData.get('customerName'),
       notes:         formData.get('notes') || undefined,
+      businessCategory: formData.get('businessCategory') || undefined,
       enquiryId:     formData.get('enquiryId') || undefined,
       distributorId: formData.get('distributorId') || undefined,
       dealerId:      formData.get('dealerId') || undefined,
@@ -263,6 +267,16 @@ export async function getDistributorOptionsAction(): Promise<ActionResult<Option
     await dbConnect()
     const rows = await Distributor.find({ isActive: true }).select('name').sort({ name: 1 }).lean()
     return { ok: true, data: toPlain(rows.map((r) => ({ _id: String(r._id), name: r.name }))) }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+export async function getBusinessCategoryOptionsAction(): Promise<ActionResult<MasterOption[]>> {
+  try {
+    await requireSession()
+    const options = await getMasterOptions('business_category')
+    return { ok: true, data: options }
   } catch (err) {
     return authErrorToResult(err)
   }

@@ -18,7 +18,8 @@ export const CACHE_TAGS = {
   dealers:       'dealers',
   fieldVisits:   'field-visits',
   complaints:    'complaints',
-  voiceNotes:    (enquiryId: string) => `voice-notes-${enquiryId}`,
+  voiceNotes:         (enquiryId: string)   => `voice-notes-${enquiryId}`,
+  voiceNotesComplaint: (complaintId: string) => `voice-notes-complaint-${complaintId}`,
   // aggregate tags (invalidated when any record in the domain changes)
   dashboard:     'dashboard',
   reports:       'reports',

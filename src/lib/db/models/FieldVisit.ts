@@ -15,6 +15,7 @@ export interface IFieldVisit {
   visitType:     VisitType
   customerName:  string
   notes?:        string
+  businessCategory?: string | null       // code, ref MasterData(business_category), optional
   enquiryId?:    Types.ObjectId | null   // ref Enquiry, optional
   distributorId?: Types.ObjectId | null  // ref Distributor, optional
   dealerId?:     Types.ObjectId | null   // ref Dealer, optional
@@ -53,6 +54,11 @@ const FieldVisitSchema = new Schema<FieldVisitDocument>(
       type:      String,
       trim:      true,
       maxlength: [3000, 'Notes cannot exceed 3000 characters'],
+    },
+    businessCategory: {
+      type:    String,
+      trim:    true,
+      default: null,
     },
     enquiryId: {
       type:    Schema.Types.ObjectId,

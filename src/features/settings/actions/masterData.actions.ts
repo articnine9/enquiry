@@ -25,7 +25,16 @@ const TYPE_TO_ENQUIRY_FIELD: Record<MasterDataType, string> = {
   enquiry_priority:     'priority',
   business_category:    'businessCategory',
   business_subcategory: 'businessSubCategory',
+  state:                'state',
+  district:             'district',
+  city:                 'city',
+  pincode:              'pincode',
 }
+
+// Location types store the enquiry's *label* text (not the MasterData code) —
+// staff auto-assignment zone-matching keys off that exact text, so the
+// combobox submits e.g. "Chennai" rather than an internal code.
+const LABEL_VALUED_TYPES = new Set<MasterDataType>(['state', 'district', 'city', 'pincode'])
 
 // ── Row shape returned to the admin UI ─────────────────────────────────────────
 
@@ -199,7 +208,8 @@ export async function deleteMasterDataAction(
 
     // Block deletion when enquiries still reference this value.
     const field = TYPE_TO_ENQUIRY_FIELD[row.type]
-    const inUse = await Enquiry.countDocuments({ [field]: row.code })
+    const matchValue = LABEL_VALUED_TYPES.has(row.type) ? row.label : row.code
+    const inUse = await Enquiry.countDocuments({ [field]: matchValue })
     if (inUse > 0) {
       return { ok: false, error: `In use by ${inUse} enquir${inUse === 1 ? 'y' : 'ies'} — deactivate it instead` }
     }

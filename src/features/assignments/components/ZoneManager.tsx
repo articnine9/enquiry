@@ -5,8 +5,18 @@ import { Plus, Edit2, ToggleLeft, ToggleRight, MapPin, Loader2, X } from 'lucide
 import { cn } from '@/lib/utils'
 import {
   getZonesAction, createZoneAction, updateZoneAction, toggleZoneActiveAction,
+  getStateOptionsAction, getCoverageForStatesAction,
   type ZoneRow,
 } from '../actions/zone.actions'
+import type { MasterOption } from '@/features/settings/services/masterData.service'
+
+/** Merges new items into a comma-separated list, case-insensitively deduped. */
+function mergeCommaList(existing: string, additions: string[]): string {
+  const current = existing.split(',').map((s) => s.trim()).filter(Boolean)
+  const seen = new Set(current.map((s) => s.toLowerCase()))
+  const toAdd = additions.filter((a) => !seen.has(a.toLowerCase()))
+  return [...current, ...toAdd].join(', ')
+}
 
 // ── Zone form dialog ──────────────────────────────────────────────────────────
 
@@ -23,11 +33,54 @@ function ZoneForm({ zone, onSave, onCancel }: ZoneFormProps) {
     name:        zone?.name        ?? '',
     code:        zone?.code        ?? '',
     description: zone?.description ?? '',
-    pincodes:    zone?.pincodes.join(', ') ?? '',
-    cities:      zone?.cities.join(', ')   ?? '',
-    states:      zone?.states.join(', ')   ?? '',
+    pincodes:    zone?.pincodes.join(', ')  ?? '',
+    districts:   zone?.districts.join(', ') ?? '',
+    cities:      zone?.cities.join(', ')    ?? '',
     isActive:    zone?.isActive    ?? true,
   })
+
+  // ── State picker — auto-fills Districts/Cities above; unmatched legacy
+  //    `states` text (e.g. from old non-master-data seeds) is preserved as-is.
+  const [stateOptions, setStateOptions] = useState<MasterOption[]>([])
+  useEffect(() => {
+    getStateOptionsAction().then((r) => { if (r.ok) setStateOptions(r.data) })
+  }, [])
+
+  const [selectedStateCodes, setSelectedStateCodes] = useState<string[]>([])
+  const [legacyStates, setLegacyStates] = useState<string[]>([])
+  useEffect(() => {
+    if (stateOptions.length === 0) return
+    const zoneStates = zone?.states ?? []
+    const matched: string[] = []
+    const unmatched: string[] = []
+    for (const s of zoneStates) {
+      const opt = stateOptions.find((o) => o.label.toLowerCase() === s.toLowerCase())
+      if (opt) matched.push(opt.value); else unmatched.push(s)
+    }
+    setSelectedStateCodes(matched)
+    setLegacyStates(unmatched)
+  }, [stateOptions]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleState(code: string) {
+    const adding = !selectedStateCodes.includes(code)
+    const next = adding
+      ? [...selectedStateCodes, code]
+      : selectedStateCodes.filter((c) => c !== code)
+    setSelectedStateCodes(next)
+
+    if (adding) {
+      getCoverageForStatesAction([code]).then((r) => {
+        if (!r.ok) return
+        setForm((p) => ({
+          ...p,
+          districts: mergeCommaList(p.districts, r.data.districts),
+          cities:    mergeCommaList(p.cities, r.data.cities),
+        }))
+      })
+    }
+    // Unchecking a state intentionally leaves already-filled districts/cities
+    // alone — admin may have hand-edited them; nothing gets silently removed.
+  }
 
   function set(k: string, v: string | boolean) {
     setForm((p) => ({ ...p, [k]: v }))
@@ -37,14 +90,19 @@ function ZoneForm({ zone, onSave, onCancel }: ZoneFormProps) {
     e.preventDefault()
     setError(null)
 
+    const stateLabels = selectedStateCodes.map(
+      (code) => stateOptions.find((o) => o.value === code)?.label ?? code
+    )
+
     const payload = {
       name:        form.name,
       code:        form.code.toUpperCase(),
       description: form.description || undefined,
       isActive:    form.isActive,
       pincodes:    form.pincodes.split(',').map((s) => s.trim()).filter(Boolean),
+      districts:   form.districts.split(',').map((s) => s.trim()).filter(Boolean),
       cities:      form.cities.split(',').map((s) => s.trim()).filter(Boolean),
-      states:      form.states.split(',').map((s) => s.trim()).filter(Boolean),
+      states:      [...stateLabels, ...legacyStates],
     }
 
     startTransition(async () => {
@@ -103,16 +161,43 @@ function ZoneForm({ zone, onSave, onCancel }: ZoneFormProps) {
               <input type="text" value={form.description} onChange={(e) => set('description', e.target.value)} className={INPUT} placeholder="Optional description" />
             </div>
             <div className="col-span-2">
+              <label className={LABEL}>States</label>
+              <div className="flex flex-wrap gap-2">
+                {stateOptions.length === 0 ? (
+                  <p className="text-xs text-slate-400">Loading states…</p>
+                ) : stateOptions.map((o) => (
+                  <label
+                    key={o.value}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition-colors',
+                      selectedStateCodes.includes(o.value)
+                        ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedStateCodes.includes(o.value)}
+                      onChange={() => toggleState(o.value)}
+                      className="w-3.5 h-3.5 rounded text-indigo-600"
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">Picking a state fills in its districts/cities below — edit freely afterward.</p>
+            </div>
+            <div className="col-span-2">
+              <label className={LABEL}>Districts (comma separated)</label>
+              <input type="text" value={form.districts} onChange={(e) => set('districts', e.target.value)} className={INPUT} placeholder="Chennai, Coimbatore" />
+            </div>
+            <div className="col-span-2">
               <label className={LABEL}>Cities (comma separated)</label>
-              <input type="text" value={form.cities} onChange={(e) => set('cities', e.target.value)} className={INPUT} placeholder="London, Camden, Islington" />
+              <input type="text" value={form.cities} onChange={(e) => set('cities', e.target.value)} className={INPUT} placeholder="Chennai, T. Nagar, Adyar" />
             </div>
             <div className="col-span-2">
               <label className={LABEL}>Postcodes / Pincodes (comma separated)</label>
-              <input type="text" value={form.pincodes} onChange={(e) => set('pincodes', e.target.value)} className={INPUT} placeholder="N1, N2, EC1" />
-            </div>
-            <div className="col-span-2">
-              <label className={LABEL}>States / Counties (comma separated)</label>
-              <input type="text" value={form.states} onChange={(e) => set('states', e.target.value)} className={INPUT} placeholder="Greater London" />
+              <input type="text" value={form.pincodes} onChange={(e) => set('pincodes', e.target.value)} className={INPUT} placeholder="600001, 600017" />
             </div>
           </div>
 
@@ -216,6 +301,8 @@ export default function ZoneManager() {
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-500">
                   {[
+                    z.states.length   > 0 && `${z.states.length} states`,
+                    z.districts.length > 0 && `${z.districts.length} districts`,
                     z.cities.length   > 0 && `${z.cities.length} cities`,
                     z.pincodes.length > 0 && `${z.pincodes.length} postcodes`,
                   ].filter(Boolean).join(' · ') || '—'}

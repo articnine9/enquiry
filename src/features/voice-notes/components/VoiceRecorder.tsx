@@ -9,13 +9,14 @@ const MAX_SECONDS  = 180
 const WAVE_BARS    = 32
 
 interface VoiceRecorderProps {
-  enquiryId:  string
-  onRecorded: (note: VoiceNoteRow) => void
+  enquiryId?:   string
+  complaintId?: string
+  onRecorded:   (note: VoiceNoteRow) => void
 }
 
 type Phase = 'idle' | 'recording' | 'preview'
 
-export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderProps) {
+export default function VoiceRecorder({ enquiryId, complaintId, onRecorded }: VoiceRecorderProps) {
   const [phase,   setPhase]   = useState<Phase>('idle')
   const [seconds, setSeconds] = useState(0)
   const [caption, setCaption] = useState('')
@@ -206,7 +207,8 @@ export default function VoiceRecorder({ enquiryId, onRecorded }: VoiceRecorderPr
     const file = new File([blob], `voice-note.${ext}`, { type: blob.type })
 
     const fd = new FormData()
-    fd.set('enquiryId', enquiryId)
+    if (enquiryId) fd.set('enquiryId', enquiryId)
+    if (complaintId) fd.set('complaintId', complaintId)
     fd.set('durationSeconds', String(seconds))
     if (caption.trim()) fd.set('caption', caption.trim())
     fd.set('audio', file)

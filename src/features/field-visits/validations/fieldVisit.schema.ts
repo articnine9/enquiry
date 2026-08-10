@@ -40,6 +40,11 @@ export const CreateFieldVisitSchema = z.object({
     .optional()
     .transform((v) => v || undefined),
 
+  businessCategory: z
+    .string({ required_error: 'Select a business category' })
+    .trim()
+    .min(1, 'Select a business category'),
+
   enquiryId:     optObjectId,
   distributorId: optObjectId,
   dealerId:      optObjectId,

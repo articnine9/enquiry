@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/auth/session'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { getFieldVisitAction } from '@/features/field-visits/actions/fieldVisit.actions'
 import VisitTypeBadge from '@/features/field-visits/components/VisitTypeBadge'
+import { labelFor } from '@/features/settings/services/masterData.service'
 import { formatDate } from '@/lib/utils'
 import type { Metadata } from 'next'
 
@@ -31,6 +32,10 @@ export default async function FieldVisitDetailPage({ params }: PageProps) {
     ? `https://maps.google.com/?q=${visit.gpsLat},${visit.gpsLng}`
     : null
 
+  const businessCategoryLabel = visit.businessCategory
+    ? await labelFor('business_category', visit.businessCategory)
+    : null
+
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-6">
       <PageHeader
@@ -55,6 +60,12 @@ export default async function FieldVisitDetailPage({ params }: PageProps) {
             <p className="text-xs font-medium text-slate-400 mb-1 flex items-center gap-1"><User className="w-3 h-3" />Logged By</p>
             <p className="text-sm text-slate-700 dark:text-slate-300">{visit.staffName ?? '—'}</p>
           </div>
+          {businessCategoryLabel && (
+            <div>
+              <p className="text-xs font-medium text-slate-400 mb-1">Business Category</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300">{businessCategoryLabel}</p>
+            </div>
+          )}
           {visit.distributorName && (
             <div>
               <p className="text-xs font-medium text-slate-400 mb-1 flex items-center gap-1"><Truck className="w-3 h-3" />Distributor</p>

@@ -95,6 +95,7 @@ export async function createComplaintAction(
       complaintDate: formData.get('complaintDate'),
       description:   formData.get('description'),
       enquiryId:     formData.get('enquiryId') || undefined,
+      distributorId: formData.get('distributorId') || undefined,
     }
 
     const parsed = CreateComplaintSchema.safeParse(raw)
@@ -116,7 +117,8 @@ export async function createComplaintAction(
     const complaint = await Complaint.create({
       ...parsed.data,
       customerId:    existingCustomer?._id ?? null,
-      distributorId: existingCustomer?.distributorId ?? null,
+      // Manual pick wins; otherwise fall back to the matched customer's own distributor.
+      distributorId: parsed.data.distributorId ?? existingCustomer?.distributorId ?? null,
       dealerId:      existingCustomer?.dealerId ?? null,
       status:        ComplaintStatus.Open,
       createdBy:     session.user.id,

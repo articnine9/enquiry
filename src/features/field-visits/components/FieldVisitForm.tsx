@@ -4,12 +4,13 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { MapPin, Camera, Save, Loader2, X, CheckCircle2 } from 'lucide-react'
-import { createFieldVisitAction, getDistributorOptionsAction, getDealerOptionsAction, type FieldVisitRow, type OptionRow } from '../actions/fieldVisit.actions'
+import { createFieldVisitAction, getDistributorOptionsAction, getDealerOptionsAction, getBusinessCategoryOptionsAction, type FieldVisitRow, type OptionRow } from '../actions/fieldVisit.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { cn } from '@/lib/utils'
 import { VisitType, VISIT_TYPE_LABELS } from '@/types/enums'
 import type { ActionResult } from '@/types/api'
+import type { MasterOption } from '@/features/settings/services/masterData.service'
 
 function todayLocal(): string {
   const d = new Date()
@@ -17,6 +18,21 @@ function todayLocal(): string {
 }
 
 const CHANNEL_VISIT_TYPES: VisitType[] = [VisitType.DealerVisit, VisitType.DistributorVisit]
+
+// Which Visit Types apply under each Business Category. Dealer/Distributor
+// visits are channel visits — available everywhere, not tied to one line.
+// Falls back to every visit type for a business category not listed here
+// (e.g. one an admin adds later) rather than showing an empty dropdown.
+const VISIT_TYPES_BY_BUSINESS_CATEGORY: Record<string, VisitType[]> = {
+  poultry: [VisitType.PoultryFarmVisit, ...CHANNEL_VISIT_TYPES],
+  horeca:  [VisitType.HotelVisit, VisitType.RestaurantVisit, ...CHANNEL_VISIT_TYPES],
+  export:  [...CHANNEL_VISIT_TYPES],
+}
+
+function getVisitTypeOptions(businessCategory: string): VisitType[] {
+  if (!businessCategory) return []
+  return VISIT_TYPES_BY_BUSINESS_CATEGORY[businessCategory] ?? Object.values(VisitType)
+}
 
 export default function FieldVisitForm() {
   const router = useRouter()
@@ -31,10 +47,23 @@ export default function FieldVisitForm() {
   const fe = !state?.ok && state?.fieldErrors ? state.fieldErrors : {}
   const values = !state?.ok ? state?.values as Record<string, unknown> | undefined : undefined
 
-  const [visitType, setVisitType] = useState<VisitType>(
-    (values?.visitType as VisitType) ?? VisitType.PoultryFarmVisit
+  const [businessCategories, setBusinessCategories] = useState<MasterOption[]>([])
+  useEffect(() => {
+    getBusinessCategoryOptionsAction().then((r) => { if (r.ok) setBusinessCategories(r.data) })
+  }, [])
+
+  const [businessCategory, setBusinessCategory] = useState((values?.businessCategory as string) ?? '')
+  const [visitType, setVisitTypeRaw] = useState<VisitType | ''>(
+    (values?.visitType as VisitType) ?? ''
   )
-  const isChannelVisit = CHANNEL_VISIT_TYPES.includes(visitType)
+  const visitTypeOptions = getVisitTypeOptions(businessCategory)
+  const isChannelVisit = CHANNEL_VISIT_TYPES.includes(visitType as VisitType)
+
+  function handleBusinessCategoryChange(next: string) {
+    setBusinessCategory(next)
+    const stillValid = getVisitTypeOptions(next).includes(visitType as VisitType)
+    if (!stillValid) setVisitTypeRaw('')
+  }
 
   const [distributors, setDistributors] = useState<OptionRow[]>([])
   const [dealers, setDealers] = useState<OptionRow[]>([])
@@ -95,15 +124,31 @@ export default function FieldVisitForm() {
 
   return (
     <form action={formAction} noValidate className="space-y-5">
-      {/* ── Visit type ────────────────────────────────────────────────────── */}
-      <FormField id="visitType" label="Visit Type" required error={fe.visitType}>
+      {/* ── Business Category ─────────────────────────────────────────────── */}
+      <FormField id="businessCategory" label="Business Category" required error={fe.businessCategory}>
+        <select
+          id="businessCategory" name="businessCategory"
+          value={businessCategory}
+          onChange={(e) => handleBusinessCategoryChange(e.target.value)}
+          className={selectClass(!!fe.businessCategory)}
+        >
+          <option value="">Select business category…</option>
+          {businessCategories.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </FormField>
+
+      {/* ── Visit type (depends on Business Category) ───────────────────── */}
+      <FormField id="visitType" label="Visit Type" required error={fe.visitType}
+        hint={!businessCategory ? 'Select a business category first' : undefined}>
         <select
           id="visitType" name="visitType"
           value={visitType}
-          onChange={(e) => setVisitType(e.target.value as VisitType)}
+          onChange={(e) => setVisitTypeRaw(e.target.value as VisitType)}
+          disabled={!businessCategory}
           className={selectClass(!!fe.visitType)}
         >
-          {Object.values(VisitType).map((v) => (
+          <option value="">Select visit type…</option>
+          {visitTypeOptions.map((v) => (
             <option key={v} value={v}>{VISIT_TYPE_LABELS[v]}</option>
           ))}
         </select>

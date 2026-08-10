@@ -6,6 +6,7 @@ import dbConnect from '@/lib/db/connection'
 import LocationZone from '@/lib/db/models/LocationZone'
 import { requireRole } from '@/lib/auth/session'
 import { UserRole } from '@/types/enums'
+import { getMasterOptions, getMasterSubOptions, type MasterOption } from '@/features/settings/services/masterData.service'
 import type { ActionResult } from '@/types/api'
 
 function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
@@ -19,6 +20,7 @@ export interface ZoneRow {
   description?: string
   isActive:     boolean
   pincodes:     string[]
+  districts:    string[]
   cities:       string[]
   states:       string[]
   staffCount?:  number
@@ -33,6 +35,7 @@ const ZoneSchema = z.object({
   description: z.string().max(500).optional(),
   isActive:    z.boolean().default(true),
   pincodes:    z.array(z.string()).default([]),
+  districts:   z.array(z.string()).default([]),
   cities:      z.array(z.string()).default([]),
   states:      z.array(z.string()).default([]),
 })
@@ -64,10 +67,10 @@ export async function getZonesAction(): Promise<ActionResult<ZoneRow[]>> {
         code:        z.code,
         description: z.description,
         isActive:    z.isActive,
-        pincodes:    z.pincodes ?? [],
-        cities:      z.cities   ?? [],
-        // `states` is stored on seeded docs but not declared on the schema
-        states:      (z as { states?: string[] }).states ?? [],
+        pincodes:    z.pincodes  ?? [],
+        districts:   z.districts ?? [],
+        cities:      z.cities    ?? [],
+        states:      z.states    ?? [],
         staffCount:  countMap.get(String(z._id)) ?? 0,
         createdAt:   String(z.createdAt),
       }))),
@@ -142,5 +145,49 @@ export async function toggleZoneActiveAction(
     return { ok: true, data: null }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed' }
+  }
+}
+
+// ── State picker + auto-expand (admin convenience for zone coverage) ──────────
+
+export async function getStateOptionsAction(): Promise<ActionResult<MasterOption[]>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    const options = await getMasterOptions('state')
+    return { ok: true, data: options }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load states' }
+  }
+}
+
+/**
+ * Given selected state codes, resolves every district/city under them from
+ * the location master data — used to auto-fill a zone's coverage lists.
+ * zone-matcher's own lookups never consult this; it's purely a form helper.
+ */
+export async function getCoverageForStatesAction(
+  stateCodes: string[]
+): Promise<ActionResult<{ districts: string[]; cities: string[] }>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+
+    const [allDistricts, allCities] = await Promise.all([
+      getMasterSubOptions('district'),
+      getMasterSubOptions('city'),
+    ])
+
+    const matchedDistricts    = allDistricts.filter((d) => stateCodes.includes(d.parentCode))
+    const matchedDistrictCodes = new Set(matchedDistricts.map((d) => d.value))
+    const matchedCities        = allCities.filter((c) => matchedDistrictCodes.has(c.parentCode))
+
+    return {
+      ok: true,
+      data: {
+        districts: matchedDistricts.map((d) => d.label),
+        cities:    matchedCities.map((c) => c.label),
+      },
+    }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to resolve coverage' }
   }
 }
