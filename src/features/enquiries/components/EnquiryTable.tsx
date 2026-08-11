@@ -39,7 +39,7 @@ const COLUMNS: Column[] = [
   { key: 'escalation',   label: 'Escalation',    className: 'w-36 hidden xl:table-cell' },
   { key: 'enquirySource',label: 'Source',        className: 'w-28 hidden lg:table-cell' },
   { key: 'product',      label: 'Product',       className: 'w-32 hidden xl:table-cell' },
-  { key: 'city',         label: 'City',          className: 'w-28 hidden md:table-cell' },
+  { key: 'taluks',       label: 'Taluks',        className: 'w-32 hidden md:table-cell' },
   { key: 'channel',      label: 'Channel',       className: 'w-32 hidden xl:table-cell' },
   { key: 'assignedTo',   label: 'Assigned To',   className: 'w-36 hidden lg:table-cell' },
   { key: 'createdAt',    label: 'Created',       sortable: true, className: 'w-28 hidden sm:table-cell' },
@@ -227,9 +227,16 @@ export default function EnquiryTable({
                     {enquiry.product?.replace(/_/g, ' ') ?? '—'}
                   </td>
 
-                  {/* City */}
-                  <td className="px-4 py-3 whitespace-nowrap hidden md:table-cell text-xs text-slate-500 dark:text-slate-400">
-                    {enquiry.city}
+                  {/* Taluks */}
+                  <td
+                    className="px-4 py-3 whitespace-nowrap hidden md:table-cell text-xs text-slate-500 dark:text-slate-400"
+                    title={enquiry.taluks?.join(', ')}
+                  >
+                    {enquiry.taluks?.length
+                      ? enquiry.taluks.length > 1
+                        ? `${enquiry.taluks[0]} +${enquiry.taluks.length - 1}`
+                        : enquiry.taluks[0]
+                      : '—'}
                   </td>
 
                   {/* Channel (dealer, falling back to distributor) */}

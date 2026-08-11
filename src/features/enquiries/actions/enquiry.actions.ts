@@ -128,6 +128,9 @@ export async function createEnquiry(
         ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
         : []) as unknown as string
     }
+    // Taluks arrive as repeated `taluks` entries (one per checked option) —
+    // Object.fromEntries only keeps the last, so pull the full set separately.
+    raw.taluks = formData.getAll('taluks') as unknown as string
 
     const parsed = CreateEnquirySchema.safeParse(raw)
     if (!parsed.success) {
@@ -148,7 +151,11 @@ export async function createEnquiry(
 
     const now     = new Date()
     const policy  = await resolveSlaPolicy(parsed.data.priority, parsed.data.category)
-    const channel = await resolveChannelByArea({ district: parsed.data.district, city: parsed.data.city })
+    // City-tier matching dropped — Enquiry no longer captures a city/town
+    // value (replaced by Taluk, a different administrative level that
+    // doesn't match Dealer.serviceLocations' city entries). Falls back to
+    // district-level channel resolution.
+    const channel = await resolveChannelByArea({ district: parsed.data.district })
 
     const enquiry = await Enquiry.create({
       ...parsed.data,
@@ -160,11 +167,12 @@ export async function createEnquiry(
       createdBy:      session.user.id,
     })
 
-    // Attempt auto-assignment — non-blocking
+    // Attempt auto-assignment — non-blocking. No city-tier match anymore
+    // (see resolveChannelByArea call above for why) — falls back to
+    // district/pincode-level staff coverage.
     autoAssign({
       enquiryId: String(enquiry._id),
       pincode:   parsed.data.pincode ?? '',
-      city:      parsed.data.city,
       district:  parsed.data.district,
       actorId:   session.user.id,
       actorRole: session.user.role,
@@ -207,6 +215,9 @@ export async function updateEnquiry(
         ? raw.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
         : []) as unknown as string
     }
+    // EnquiryForm always renders the Location section, so always read the
+    // full checked set (an empty array here is a real "cleared all" edit).
+    raw.taluks = formData.getAll('taluks') as unknown as string
 
     const parsed = UpdateEnquirySchema.safeParse(raw)
     if (!parsed.success) {
@@ -250,11 +261,11 @@ export async function updateEnquiry(
       update.slaDueAt    = computeSlaDueAt(new Date(before.createdAt), policy.resolutionMinutes)
     }
 
-    // Re-resolve the distributor/dealer channel tag when district or city changes.
-    if (parsed.data.district != null || parsed.data.city != null) {
-      const district = parsed.data.district ?? before.district
-      const city      = parsed.data.city ?? before.city
-      const channel   = await resolveChannelByArea({ district, city })
+    // Re-resolve the distributor/dealer channel tag when district changes.
+    // District-only — see the create-side comment on why city-tier matching
+    // was dropped (Enquiry no longer captures a city/town value).
+    if (parsed.data.district != null) {
+      const channel = await resolveChannelByArea({ district: parsed.data.district })
       update.distributorId = channel.distributorId ?? null
       update.dealerId      = channel.dealerId ?? null
     }
@@ -403,7 +414,7 @@ export async function updateLeadStageAction(
 
     await dbConnect()
     const before = await Enquiry.findById(id)
-      .select('leadStage assignedTo convertedAt customerName phone email address city district product category distributorId dealerId businessCategory businessSubCategory')
+      .select('leadStage assignedTo convertedAt customerName phone email address taluks district product category distributorId dealerId businessCategory businessSubCategory')
       .lean()
     if (!before) return { ok: false, error: 'Enquiry not found' }
 
@@ -517,7 +528,7 @@ export async function getEnquiries(
 
     const {
       search, status, leadStage, priority, enquirySource, product,
-      category, businessCategory, businessSubCategory, assignedTo, city, district, distributorId, dealerId, slaStatus,
+      category, businessCategory, businessSubCategory, assignedTo, taluk, district, distributorId, dealerId, slaStatus,
       dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
     } = parsed.data
 
@@ -545,7 +556,7 @@ export async function getEnquiries(
     if (category)      filter.category      = category
     if (businessCategory)    filter.businessCategory    = businessCategory
     if (businessSubCategory) filter.businessSubCategory = businessSubCategory
-    if (city)          filter.city          = { $regex: city, $options: 'i' }
+    if (taluk)         filter.taluks        = { $regex: taluk, $options: 'i' }   // matches if any taluk in the array contains the text
     if (district)      filter.district      = { $regex: district, $options: 'i' }
     if (distributorId) filter.distributorId = distributorId
     if (dealerId)      filter.dealerId      = dealerId
@@ -677,7 +688,7 @@ export interface StaffAssignOption {
   email:        string
   loadPercent:  number
   isOverloaded: boolean
-  zoneMatch:    boolean   // staff's district/city coverage matches this enquiry's
+  zoneMatch:    boolean   // staff's district coverage matches this enquiry's
 }
 
 export async function getStaffForAssignmentAction(
@@ -687,11 +698,10 @@ export async function getStaffForAssignmentAction(
     await requirePermission('enquiry:assign')
     await dbConnect()
 
-    const enquiry = await Enquiry.findById(enquiryId).select('district city').lean()
+    const enquiry = await Enquiry.findById(enquiryId).select('district').lean()
     if (!enquiry) return { ok: false, error: 'Enquiry not found' }
 
     const district = enquiry.district?.trim().toLowerCase()
-    const city     = enquiry.city?.trim().toLowerCase()
 
     const staff = await User.find({ role: UserRole.Staff, status: UserStatus.Active })
       .select('name email district city currentLoad maxLoad')
@@ -699,9 +709,7 @@ export async function getStaffForAssignmentAction(
 
     const options: StaffAssignOption[] = staff.map((s) => {
       const loadPercent = s.maxLoad > 0 ? Math.round((s.currentLoad / s.maxLoad) * 100) : 0
-      const zoneMatch =
-        (!!district && s.district?.trim().toLowerCase() === district) ||
-        (!!city     && s.city?.trim().toLowerCase()     === city)
+      const zoneMatch = !!district && s.district?.trim().toLowerCase() === district
       return {
         id:           String(s._id),
         name:         s.name,

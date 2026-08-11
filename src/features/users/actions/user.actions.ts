@@ -8,7 +8,7 @@ import LocationZone from '@/lib/db/models/LocationZone'
 import { requireRole, requireSession } from '@/lib/auth/session'
 import { UserRole, UserStatus } from '@/types/enums'
 import {
-  CreateUserSchema, UpdateUserSchema,
+  CreateUserSchema, UpdateUserSchema, UpdateOwnProfileSchema,
   ChangePasswordSchema, AdminResetPasswordSchema,
   type CreateUserInput, type UpdateUserInput,
 } from '../validations/user.schema'
@@ -250,6 +250,54 @@ export async function deleteUserAction(id: string): Promise<ActionResult<null>> 
 }
 
 // ── Change own password ───────────────────────────────────────────────────────
+
+// ── Update own profile (self-service — any logged-in user) ────────────────────
+// Deliberately separate from updateUserAction above, which is gated to
+// SuperAdmin/Manager for editing *other* users on the Staff management page
+// and (for Managers) only permits editing Staff-role targets — neither of
+// which fits a user editing their own name/email/phone.
+
+export async function getOwnProfileAction(): Promise<ActionResult<{ name: string; email: string; phone?: string }>> {
+  try {
+    const session = await requireSession()
+    await dbConnect()
+
+    const u = await User.findById(session.user.id).select('name email phone').lean()
+    if (!u) return { ok: false, error: 'User not found' }
+
+    return { ok: true, data: { name: u.name, email: u.email, phone: u.phone ?? undefined } }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load profile' }
+  }
+}
+
+export async function updateOwnProfileAction(input: unknown): Promise<ActionResult<null>> {
+  try {
+    const session = await requireSession()
+    await dbConnect()
+
+    const parsed = UpdateOwnProfileSchema.safeParse(input)
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.errors[0]?.message ?? 'Validation failed' }
+    }
+
+    const clash = await User.findOne({ email: parsed.data.email, _id: { $ne: session.user.id } })
+    if (clash) return { ok: false, error: 'Email already in use' }
+
+    await User.findByIdAndUpdate(session.user.id, {
+      $set: {
+        name:  parsed.data.name,
+        email: parsed.data.email,
+        phone: parsed.data.phone ?? null,
+      },
+    })
+
+    revalidateTag('users')
+    return { ok: true, data: null }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update profile' }
+  }
+}
 
 export async function changePasswordAction(
   input: unknown

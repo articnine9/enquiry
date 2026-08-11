@@ -72,12 +72,12 @@ export async function getEnquiryFormOptions(): Promise<{
   businessSubCategories: MasterSubOption[]
   states:    MasterOption[]
   districts: MasterSubOption[]
-  cities:    MasterSubOption[]
+  taluks:    MasterSubOption[]
   pincodes:  MasterSubOption[]
 }> {
   const [
     sources, categories, products, priorities, businessCategories, businessSubCategories,
-    states, districts, cities, pincodes,
+    states, districts, taluks, pincodes,
   ] = await Promise.all([
     getMasterOptions('enquiry_source'),
     getMasterSubOptions('enquiry_category'),
@@ -87,12 +87,12 @@ export async function getEnquiryFormOptions(): Promise<{
     getMasterSubOptions('business_subcategory'),
     getMasterOptions('state'),
     getMasterSubOptions('district'),
-    getMasterSubOptions('city'),
+    getMasterSubOptions('taluk'),
     getMasterSubOptions('pincode'),
   ])
   return {
     sources, categories, products, priorities, businessCategories, businessSubCategories,
-    states, districts, cities, pincodes,
+    states, districts, taluks, pincodes,
   }
 }
 

@@ -121,7 +121,7 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
               <DetailField label="Name"  value={enquiry.customerName} />
               <DetailField label="Phone" value={enquiry.phone} />
               {enquiry.email && <DetailField label="Email" value={enquiry.email} />}
-              <DetailField label="Address" value={[enquiry.address, enquiry.city, enquiry.district, enquiry.pincode].filter(Boolean).join(', ')} />
+              <DetailField label="Address" value={[enquiry.address, ...(enquiry.taluks ?? []), enquiry.district, enquiry.pincode].filter(Boolean).join(', ')} />
               <DetailField label="Location" value={enquiry.location} />
             </dl>
           </DetailCard>

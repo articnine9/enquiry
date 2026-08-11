@@ -111,7 +111,7 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
 
   const hasActiveFilters =
     !!(filters.status || filters.leadStage || filters.priority || filters.enquirySource ||
-       filters.product || filters.city || filters.search || filters.slaStatus ||
+       filters.product || filters.taluk || filters.search || filters.slaStatus ||
        filters.distributorId || filters.dealerId)
 
   return (
@@ -223,12 +223,12 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
           options={dealerOpts}
         />
 
-        {/* City free-text filter */}
+        {/* Taluk free-text filter */}
         <input
           type="text"
-          placeholder="City…"
-          value={filters.city ?? ''}
-          onChange={(e) => handleFilter('city', e.target.value)}
+          placeholder="Taluk…"
+          value={filters.taluk ?? ''}
+          onChange={(e) => handleFilter('taluk', e.target.value)}
           className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 w-32"
         />
       </div>

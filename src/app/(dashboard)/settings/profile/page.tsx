@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { Loader2, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
-import { updateUserAction } from '@/features/users/actions/user.actions'
+import { getOwnProfileAction, updateOwnProfileAction } from '@/features/users/actions/user.actions'
 import { SettingsHeader } from '@/features/settings/components/SettingsHeader'
 import { cn } from '@/lib/utils'
 
@@ -27,15 +27,19 @@ export default function ProfilePage() {
     phone: '',
   })
 
+  useEffect(() => {
+    getOwnProfileAction().then((r) => {
+      if (r.ok) setForm({ name: r.data.name, email: r.data.email, phone: r.data.phone ?? '' })
+    })
+  }, [])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(false)
 
-    if (!session?.user?.id) return
-
     startTransition(async () => {
-      const r = await updateUserAction(session.user.id, {
+      const r = await updateOwnProfileAction({
         name:  form.name,
         email: form.email,
         phone: form.phone || undefined,

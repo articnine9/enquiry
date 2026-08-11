@@ -12,6 +12,7 @@ export const MASTER_DATA_TYPES = [
   'state',
   'district',
   'city',
+  'taluk',
   'pincode',
 ] as const
 
@@ -27,6 +28,7 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
   state:                 'State',
   district:              'District',
   city:                  'City',
+  taluk:                 'Taluk',
   pincode:               'Pincode',
 }
 
@@ -38,5 +40,6 @@ export const MASTER_DATA_PARENT_TYPE: Partial<Record<MasterDataType, MasterDataT
   enquiry_category:     'business_category',
   district:             'state',
   city:                 'district',
-  pincode:              'city',
+  taluk:                'district',
+  pincode:              'taluk',
 }

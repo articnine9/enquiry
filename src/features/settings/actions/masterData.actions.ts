@@ -18,7 +18,10 @@ function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
 // ── Which Enquiry field each type maps to (used for the in-use guard) ──────────
 
-const TYPE_TO_ENQUIRY_FIELD: Record<MasterDataType, string> = {
+// `city` has no entry — it's no longer stored directly on Enquiry (replaced
+// by `taluk` there); it's only consulted by Zone Management's coverage
+// auto-fill, which has no single-document "in use" concept to guard against.
+const TYPE_TO_ENQUIRY_FIELD: Partial<Record<MasterDataType, string>> = {
   enquiry_source:       'enquirySource',
   enquiry_category:     'category',
   enquiry_product:      'product',
@@ -27,14 +30,14 @@ const TYPE_TO_ENQUIRY_FIELD: Record<MasterDataType, string> = {
   business_subcategory: 'businessSubCategory',
   state:                'state',
   district:             'district',
-  city:                 'city',
+  taluk:                'taluk',
   pincode:              'pincode',
 }
 
 // Location types store the enquiry's *label* text (not the MasterData code) —
 // staff auto-assignment zone-matching keys off that exact text, so the
 // combobox submits e.g. "Chennai" rather than an internal code.
-const LABEL_VALUED_TYPES = new Set<MasterDataType>(['state', 'district', 'city', 'pincode'])
+const LABEL_VALUED_TYPES = new Set<MasterDataType>(['state', 'district', 'taluk', 'pincode'])
 
 // ── Row shape returned to the admin UI ─────────────────────────────────────────
 
@@ -206,12 +209,16 @@ export async function deleteMasterDataAction(
       return { ok: false, error: 'System default options cannot be deleted — deactivate it instead' }
     }
 
-    // Block deletion when enquiries still reference this value.
+    // Block deletion when enquiries still reference this value. Types with no
+    // direct Enquiry field (e.g. `city`, only consulted by Zone Management's
+    // coverage auto-fill) have nothing to guard against — deletion proceeds.
     const field = TYPE_TO_ENQUIRY_FIELD[row.type]
-    const matchValue = LABEL_VALUED_TYPES.has(row.type) ? row.label : row.code
-    const inUse = await Enquiry.countDocuments({ [field]: matchValue })
-    if (inUse > 0) {
-      return { ok: false, error: `In use by ${inUse} enquir${inUse === 1 ? 'y' : 'ies'} — deactivate it instead` }
+    if (field) {
+      const matchValue = LABEL_VALUED_TYPES.has(row.type) ? row.label : row.code
+      const inUse = await Enquiry.countDocuments({ [field]: matchValue })
+      if (inUse > 0) {
+        return { ok: false, error: `In use by ${inUse} enquir${inUse === 1 ? 'y' : 'ies'} — deactivate it instead` }
+      }
     }
 
     await MasterData.findByIdAndDelete(id)

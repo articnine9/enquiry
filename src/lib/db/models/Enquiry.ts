@@ -23,11 +23,16 @@ export interface IEnquiry {
   // so legacy docs without it still save; required for new/edited ones via Zod
   // at the action layer, same pattern as businessCategory below.
   state?:        string
-  city:          string
   district:      string
-  // Now sourced from a cascading City → Pincode master-data list rather than
-  // free text; optional because coverage is admin-curated and won't be
-  // complete for every city from day one.
+  // Replaces the old singular `city`/`taluk` field — a coverage area rather
+  // than one address point, so an enquiry can span multiple sub-district
+  // units within its district. Optional/empty-array-able because taluk
+  // coverage is admin-curated and only seeded for a handful of districts to
+  // start; the rest is filled in over time via Settings > Master Data.
+  taluks:        string[]
+  // Sourced from a cascading Taluk → Pincode master-data list, pooled across
+  // every selected taluk; optional for the same reason — coverage won't be
+  // complete for every taluk day one.
   pincode?:      string
   location:      string          // area / locality free-text
 
@@ -195,17 +200,19 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       trim:      true,
       maxlength: [100, 'State cannot exceed 100 characters'],
     },
-    city: {
-      type:      String,
-      required:  [true, 'City is required'],
-      trim:      true,
-      maxlength: [100, 'City cannot exceed 100 characters'],
-    },
     district: {
       type:      String,
       required:  [true, 'District is required'],
       trim:      true,
       maxlength: [100, 'District cannot exceed 100 characters'],
+    },
+    taluks: {
+      type:     [String],
+      default:  [],
+      validate: {
+        validator: (v: string[]) => v.every((t) => t.trim().length > 0 && t.length <= 100),
+        message:   'Each taluk must be 1–100 characters',
+      },
     },
     pincode: {
       type:  String,
@@ -354,7 +361,7 @@ EnquirySchema.index({ status: 1, assignedTo: 1 })
 EnquirySchema.index({ status: 1, priority: 1 })
 EnquirySchema.index({ status: 1, createdAt: -1 })
 EnquirySchema.index({ assignedTo: 1, status: 1, createdAt: -1 })
-EnquirySchema.index({ city: 1, district: 1 })
+EnquirySchema.index({ taluks: 1, district: 1 })
 EnquirySchema.index({ pincode: 1 })
 EnquirySchema.index({ product: 1, status: 1 })
 EnquirySchema.index({ enquirySource: 1 })
@@ -376,7 +383,7 @@ EnquirySchema.index(
     email:        'text',
     subject:      'text',
     location:     'text',
-    city:         'text',
+    taluks:       'text',
     district:     'text',
   },
   {
@@ -385,7 +392,7 @@ EnquirySchema.index(
       phone:        8,
       email:        5,
       subject:      4,
-      city:         2,
+      taluks:       2,
       district:     2,
       location:     1,
     },

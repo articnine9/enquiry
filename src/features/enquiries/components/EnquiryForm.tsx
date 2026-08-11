@@ -7,6 +7,7 @@ import { Save, X } from 'lucide-react'
 import { createEnquiry, updateEnquiry } from '../actions/enquiry.actions'
 import { FormField, inputClass, selectClass } from '@/components/forms/FormField'
 import { Combobox } from '@/components/forms/Combobox'
+import { MultiCombobox } from '@/components/forms/MultiCombobox'
 import { SubmitButton } from '@/components/forms/SubmitButton'
 import { cn } from '@/lib/utils'
 import type { MasterOption, MasterSubOption } from '@/features/settings/services/masterData.service'
@@ -21,7 +22,7 @@ export interface EnquiryFormOptions {
   businessSubCategories: MasterSubOption[]
   states:    MasterOption[]
   districts: MasterSubOption[]
-  cities:    MasterSubOption[]
+  taluks:    MasterSubOption[]
   pincodes:  MasterSubOption[]
 }
 
@@ -42,6 +43,14 @@ function findCodeByLabel(opts: MasterSubOption[] | MasterOption[], label: string
     if (scoped) return scoped.value
   }
   return opts.find((o) => o.label === label)?.value ?? ''
+}
+
+/** Codes of the options whose labels match `labels`, preferring ones scoped to `parentCode`. */
+function findCodesByLabels(opts: MasterSubOption[], labels: string[] | undefined, parentCode?: string): string[] {
+  if (!labels?.length) return []
+  return labels
+    .map((label) => findCodeByLabel(opts, label, parentCode))
+    .filter(Boolean)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,6 +101,8 @@ export default function EnquiryForm({
   const submitted = (state && !state.ok ? state.values : undefined) as Record<string, unknown> | undefined
   const submittedStr = (key: string): string | undefined =>
     typeof submitted?.[key] === 'string' ? (submitted[key] as string) : undefined
+  const submittedArr = (key: string): string[] | undefined =>
+    Array.isArray(submitted?.[key]) ? (submitted[key] as string[]) : undefined
 
   useEffect(() => {
     if (!state) return
@@ -115,9 +126,9 @@ export default function EnquiryForm({
   const defaultOf = (opts: MasterOption[], key: string, current?: string) =>
     submittedStr(key) ?? current ?? opts[0]?.value ?? ''
 
-  // ── State → District → City → Pincode dependent dropdowns (MasterData) ──────
+  // ── State → District → Taluk → Pincode dependent dropdowns (MasterData) ─────
   // Comboboxes are keyed by MasterData *code* internally (so parentCode
-  // filtering works); the actual district/city/pincode text stored on the
+  // filtering works); the actual district/taluk/pincode text stored on the
   // enquiry is the *label*, unchanged from before — staff auto-assignment
   // zone-matching keys off that exact label text.
 
@@ -127,11 +138,13 @@ export default function EnquiryForm({
   const [districtCode, setDistrictCodeRaw] = useState(
     submittedStr('districtCode') ?? findCodeByLabel(options.districts, enquiry?.district, stateCode)
   )
-  const [cityCode,     setCityCodeRaw]     = useState(
-    submittedStr('cityCode') ?? findCodeByLabel(options.cities, enquiry?.city, districtCode)
+  const [talukCodes,   setTalukCodesRaw]   = useState<string[]>(
+    submittedArr('taluks')
+      ? findCodesByLabels(options.taluks, submittedArr('taluks'), districtCode)
+      : findCodesByLabels(options.taluks, enquiry?.taluks, districtCode)
   )
   const [pincodeCode,  setPincodeCode]     = useState(
-    submittedStr('pincodeCode') ?? findCodeByLabel(options.pincodes, enquiry?.pincode, cityCode)
+    submittedStr('pincodeCode') ?? findCodeByLabel(options.pincodes, enquiry?.pincode, talukCodes[0])
   )
 
   const stateOptions    = useMemo(() => options.states.map((s) => ({ value: s.value, label: s.label })), [options.states])
@@ -139,35 +152,39 @@ export default function EnquiryForm({
     () => options.districts.filter((d) => d.parentCode === stateCode).map((d) => ({ value: d.value, label: d.label })),
     [options.districts, stateCode]
   )
-  const cityOptions = useMemo(
-    () => options.cities.filter((c) => c.parentCode === districtCode).map((c) => ({ value: c.value, label: c.label })),
-    [options.cities, districtCode]
+  const talukOptions = useMemo(
+    () => options.taluks.filter((t) => t.parentCode === districtCode).map((t) => ({ value: t.value, label: t.label })),
+    [options.taluks, districtCode]
   )
+  // Pincode options pool from every selected taluk's coverage, not just one.
   const pincodeOptions = useMemo(
-    () => options.pincodes.filter((p) => p.parentCode === cityCode).map((p) => ({ value: p.value, label: p.label })),
-    [options.pincodes, cityCode]
+    () => options.pincodes.filter((p) => talukCodes.includes(p.parentCode)).map((p) => ({ value: p.value, label: p.label })),
+    [options.pincodes, talukCodes]
   )
 
   const stateLabel    = options.states.find((s) => s.value === stateCode)?.label ?? ''
   const districtLabel = options.districts.find((d) => d.value === districtCode)?.label ?? ''
-  const cityLabel      = options.cities.find((c) => c.value === cityCode)?.label ?? ''
+  const talukLabels    = options.taluks.filter((t) => talukCodes.includes(t.value)).map((t) => t.label)
   const pincodeLabel   = options.pincodes.find((p) => p.value === pincodeCode)?.label ?? ''
 
   function setStateCode(next: string) {
     setStateCodeRaw(next)
     const stillValid = options.districts.some((d) => d.parentCode === next && d.value === districtCode)
-    if (!stillValid) { setDistrictCodeRaw(''); setCityCodeRaw(''); setPincodeCode('') }
+    if (!stillValid) { setDistrictCodeRaw(''); setTalukCodesRaw([]); setPincodeCode('') }
   }
 
   function setDistrictCode(next: string) {
     setDistrictCodeRaw(next)
-    const stillValid = options.cities.some((c) => c.parentCode === next && c.value === cityCode)
-    if (!stillValid) { setCityCodeRaw(''); setPincodeCode('') }
+    const stillValidTaluks = talukCodes.filter((tc) => options.taluks.some((t) => t.parentCode === next && t.value === tc))
+    setTalukCodesRaw(stillValidTaluks)
+    if (!stillValidTaluks.some((tc) => options.pincodes.some((p) => p.parentCode === tc && p.value === pincodeCode))) {
+      setPincodeCode('')
+    }
   }
 
-  function setCityCode(next: string) {
-    setCityCodeRaw(next)
-    const stillValid = options.pincodes.some((p) => p.parentCode === next && p.value === pincodeCode)
+  function setTalukCodes(next: string[]) {
+    setTalukCodesRaw(next)
+    const stillValid = options.pincodes.some((p) => next.includes(p.parentCode) && p.value === pincodeCode)
     if (!stillValid) setPincodeCode('')
   }
 
@@ -266,11 +283,13 @@ export default function EnquiryForm({
             />
           </FormField>
 
-          {/* Submitted district/city/pincode/state are the resolved *labels* —
-              staff auto-assignment zone-matching keys off that exact text. */}
+          {/* Submitted district/pincode/state are the resolved *labels* —
+              staff auto-assignment zone-matching keys off that exact text.
+              Taluks submit as one hidden input per selected label, read via
+              formData.getAll('taluks') on the server. */}
           <input type="hidden" name="state"    value={stateLabel} />
           <input type="hidden" name="district" value={districtLabel} />
-          <input type="hidden" name="city"     value={cityLabel} />
+          {talukLabels.map((label) => <input key={label} type="hidden" name="taluks" value={label} />)}
           <input type="hidden" name="pincode"  value={pincodeLabel} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -304,24 +323,24 @@ export default function EnquiryForm({
               />
             </FormField>
 
-            <FormField id="cityCode" label="City" required error={fe.city}
-              hint={!districtCode ? 'Select a district first' : undefined}>
-              <Combobox
-                id="cityCode" name="cityCode"
-                options={cityOptions}
-                value={cityCode}
-                onChange={setCityCode}
-                placeholder="Select city"
-                searchPlaceholder="Search city…"
-                emptyText="No city found"
+            <FormField id="talukCodes" label="Taluks" error={fe.taluks}
+              hint={!districtCode ? 'Select a district first' : 'Optional — pick the coverage area, add missing taluks in Settings › Master Data'}>
+              <MultiCombobox
+                id="talukCodes" name="talukCodes"
+                options={talukOptions}
+                value={talukCodes}
+                onChange={setTalukCodes}
+                placeholder="Select taluks"
+                searchPlaceholder="Search taluk…"
+                emptyText="No taluk found"
                 disabled={isPending || !districtCode}
                 disabledHint={!districtCode ? 'Select a district first' : undefined}
-                hasError={!!fe.city}
+                hasError={!!fe.taluks}
               />
             </FormField>
 
             <FormField id="pincodeCode" label="Pincode" error={fe.pincode}
-              hint={!cityCode ? 'Select a city first' : 'Optional — add missing pincodes in Settings › Master Data'}>
+              hint={!talukCodes.length ? 'Select a taluk first' : 'Optional — add missing pincodes in Settings › Master Data'}>
               <Combobox
                 id="pincodeCode" name="pincodeCode"
                 options={pincodeOptions}
@@ -330,8 +349,8 @@ export default function EnquiryForm({
                 placeholder="Select pincode"
                 searchPlaceholder="Search pincode…"
                 emptyText="No pincode found"
-                disabled={isPending || !cityCode}
-                disabledHint={!cityCode ? 'Select a city first' : undefined}
+                disabled={isPending || !talukCodes.length}
+                disabledHint={!talukCodes.length ? 'Select a taluk first' : undefined}
                 hasError={!!fe.pincode}
               />
             </FormField>

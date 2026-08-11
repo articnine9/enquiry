@@ -9,7 +9,10 @@ export interface ConvertibleEnquiry {
   phone:          string
   email?:         string
   address:        string
-  city:           string
+  // Enquiry no longer captures a single city/town value (replaced by a
+  // taluks coverage list); the first entry is carried into Customer.city as
+  // the closest available granularity, best-effort.
+  taluks?:        string[]
   district:       string
   product:        string
   category:       string
@@ -41,6 +44,7 @@ export async function convertEnquiryToCustomer(
     ? (await Distributor.findById(distributorId).select('territory').lean())?.territory
     : undefined
 
+  const primaryTaluk      = enquiry.taluks?.[0]
   const dealValue         = enquiry.dealValue ?? null
   const businessCategory  = enquiry.businessCategory ?? null
   const businessSubCategory = enquiry.businessSubCategory ?? null
@@ -73,7 +77,7 @@ export async function convertEnquiryToCustomer(
         name:               enquiry.customerName,
         email:              enquiry.email || existing.email,
         address:            enquiry.address,
-        city:               enquiry.city,
+        city:               primaryTaluk || existing.city,
         district:           enquiry.district,
         territory:          territory ?? existing.territory,
         distributorId:      distributorId ?? existing.distributorId,
@@ -91,7 +95,7 @@ export async function convertEnquiryToCustomer(
     phone:             enquiry.phone,
     email:             enquiry.email || undefined,
     address:           enquiry.address,
-    city:              enquiry.city,
+    city:              primaryTaluk,
     district:          enquiry.district,
     territory:         territory ?? undefined,
     distributorId,

@@ -23,8 +23,8 @@ const emailField = z
   .optional()
   .or(z.literal(''))
 
-// Optional — sourced from a cascading City → Pincode master-data list, which
-// won't have coverage for every city from day one.
+// Optional — sourced from a cascading Taluk → Pincode master-data list, which
+// won't have coverage for every taluk from day one.
 const pincodeField = z
   .string()
   .trim()
@@ -32,6 +32,13 @@ const pincodeField = z
   .optional()
   .or(z.literal(''))
   .transform((v) => v || undefined)
+
+// Optional coverage-area list — sourced from a cascading District → Taluk
+// master-data list, seeded only for a handful of districts to start; the
+// rest is filled in over time via Settings > Master Data.
+const taluksField = z
+  .array(z.string().trim().min(1).max(100, 'Taluk cannot exceed 100 characters'))
+  .default([])
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -54,11 +61,7 @@ export const CreateEnquirySchema = z.object({
     .trim()
     .min(2,   'State must be at least 2 characters')
     .max(100, 'State cannot exceed 100 characters'),
-  city: z
-    .string({ required_error: 'City is required' })
-    .trim()
-    .min(2,   'City must be at least 2 characters')
-    .max(100, 'City cannot exceed 100 characters'),
+  taluks:   taluksField,
   district: z
     .string({ required_error: 'District is required' })
     .trim()
@@ -165,7 +168,7 @@ export const EnquiryFilterSchema = z.object({
   businessCategory:    z.string().trim().optional(),
   businessSubCategory: z.string().trim().optional(),
   assignedTo:    z.string().optional(),
-  city:          z.string().trim().optional(),
+  taluk:         z.string().trim().optional(),   // free-text filter, matches any taluk in the list
   district:      z.string().trim().optional(),
   distributorId: z.string().optional(),
   dealerId:      z.string().optional(),

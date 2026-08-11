@@ -24,6 +24,14 @@ export const UpdateUserSchema = z.object({
   city:           z.string().max(100).trim().optional().nullable(),
 })
 
+// Self-service — deliberately excludes role/status/locationZoneId, which are
+// admin-only concerns set via UpdateUserSchema on the Staff management page.
+export const UpdateOwnProfileSchema = z.object({
+  name:  z.string().min(2).max(100).trim(),
+  email: z.string().email().toLowerCase().trim(),
+  phone: z.string().max(20).trim().optional().or(z.literal('')).transform((v) => v || undefined),
+})
+
 export const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword:     z.string().min(8).max(100),
@@ -38,4 +46,5 @@ export const AdminResetPasswordSchema = z.object({
 
 export type CreateUserInput  = z.infer<typeof CreateUserSchema>
 export type UpdateUserInput  = z.infer<typeof UpdateUserSchema>
+export type UpdateOwnProfileInput = z.infer<typeof UpdateOwnProfileSchema>
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>
