@@ -228,3 +228,26 @@ export async function deleteMasterDataAction(
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to delete option' }
   }
 }
+
+// ── Inventory Master Options Action ──────────────────────────────────────────
+
+export async function getInventoryMasterOptionsAction(): Promise<
+  ActionResult<{
+    categories:        Array<{ value: string; label: string }>
+    subCategories:     Array<{ value: string; label: string; parentCode: string }>
+    uoms:              Array<{ value: string; label: string }>
+    warehouseTypes:    Array<{ value: string; label: string }>
+    adjustmentReasons: Array<{ value: string; label: string }>
+    taxRates:          Array<{ value: string; label: string }>
+  }>
+> {
+  try {
+    await dbConnect()
+    const { getInventoryFormOptions } = await import('../services/masterData.service')
+    const options = await getInventoryFormOptions()
+    return { ok: true, data: toPlain(options) }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load inventory master options' }
+  }
+}
+

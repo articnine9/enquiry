@@ -33,8 +33,9 @@ interface RowFormProps {
 function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const isPriority  = type === 'enquiry_priority'
-  const parentType  = MASTER_DATA_PARENT_TYPE[type]
+  const isPriority = type === 'enquiry_priority'
+  const isTaxRate  = type === 'inventory_tax_rate'
+  const parentType = MASTER_DATA_PARENT_TYPE[type]
   const [form, setForm] = useState({
     code:       row?.code       ?? '',
     label:      row?.label      ?? '',
@@ -66,6 +67,7 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
       sortOrder: Number(form.sortOrder) || 0,
       isActive:  form.isActive,
       ...(isPriority ? { color: form.color, weight: Number(form.weight) || 0 } : {}),
+      ...(isTaxRate ? { weight: Number(form.weight) || 0 } : {}),
       ...(parentType ? { parentCode: form.parentCode } : {}),
     }
 
@@ -105,27 +107,36 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className={LABEL}>Label *</label>
-              <input required type="text" value={form.label} onChange={(e) => set('label', e.target.value)} className={INPUT} placeholder="e.g. WhatsApp" />
-            </div>
-            <div className="col-span-2">
-              <label className={LABEL}>
-                Code * {row?.isSystem && <span className="text-slate-400">(locked — system default)</span>}
-              </label>
+          <div className="space-y-3">
+            <div>
+              <label className={LABEL}>Internal code</label>
               <input
-                required type="text" value={form.code}
-                onChange={(e) => set('code', e.target.value.toLowerCase())}
-                disabled={row?.isSystem}
-                className={INPUT} placeholder="e.g. whatsapp" maxLength={40}
+                type="text"
+                value={form.code}
+                onChange={(e) => set('code', e.target.value)}
+                disabled={Boolean(row?.isSystem)}
+                className={cn(INPUT, 'font-mono text-xs')}
+                placeholder="e.g. cold_storage, poultry_feed"
+                required
               />
-              <p className="mt-1 text-[11px] text-slate-400">Lowercase letters, digits, underscores. Stored on each enquiry — avoid changing later.</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Unique key used in database records (lowercase letters, digits, underscores).</p>
+            </div>
+
+            <div>
+              <label className={LABEL}>Display label</label>
+              <input
+                type="text"
+                value={form.label}
+                onChange={(e) => set('label', e.target.value)}
+                className={INPUT}
+                placeholder="e.g. Cold Storage Facility"
+                required
+              />
             </div>
 
             {parentType && (
-              <div className="col-span-2">
-                <label className={LABEL}>Parent {MASTER_DATA_TYPE_LABELS[parentType]} *</label>
+              <div>
+                <label className={LABEL}>Parent category ({MASTER_DATA_TYPE_LABELS[parentType]})</label>
                 <Combobox
                   id="parentCode"
                   name="parentCode"
@@ -152,6 +163,21 @@ function RowForm({ type, row, onSave, onCancel }: RowFormProps) {
                   <input type="number" value={form.weight} onChange={(e) => set('weight', e.target.value)} className={INPUT} placeholder="1–4" />
                 </div>
               </>
+            )}
+
+            {isTaxRate && (
+              <div>
+                <label className={LABEL}>Tax Percentage (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.weight}
+                  onChange={(e) => set('weight', e.target.value)}
+                  className={INPUT}
+                  placeholder="e.g. 18"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">Numeric tax rate applied on invoice calculations.</p>
+              </div>
             )}
 
             <div>
@@ -189,6 +215,7 @@ export default function MasterDataManager() {
   const [isLoading, setIsLoading]   = useState(true)
   const [editing,   setEditing]     = useState<MasterDataRow | null | 'new'>(null)
   const [error,     setError]       = useState<string | null>(null)
+
   const [parentLabels, setParentLabels] = useState<Record<string, string>>({})
   const [parentRows,   setParentRows]   = useState<MasterDataRow[]>([])
   const [filterParentCode, setFilterParentCode] = useState('')
@@ -231,7 +258,8 @@ export default function MasterDataManager() {
   }
 
   const isPriority = activeType === 'enquiry_priority'
-  const colCount   = 5 + (isPriority || parentType ? 1 : 0)
+  const isTaxRate  = activeType === 'inventory_tax_rate'
+  const colCount   = 5 + (isPriority || isTaxRate || parentType ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -260,43 +288,51 @@ export default function MasterDataManager() {
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
-        {parentType ? (
-          <div className="w-64">
-            <Combobox
-              id="filterParentCode"
-              name="filterParentCode"
-              options={parentRows.map((p) => ({ value: p.code, label: p.label }))}
-              value={filterParentCode}
-              onChange={setFilterParentCode}
-              placeholder={`Filter by ${MASTER_DATA_TYPE_LABELS[parentType].toLowerCase()}…`}
-              searchPlaceholder="Search…"
-              emptyText="No options found"
-            />
-          </div>
-        ) : <div />}
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {parentType && parentRows.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Filter by {MASTER_DATA_TYPE_LABELS[parentType]}:</span>
+              <select
+                value={filterParentCode}
+                onChange={(e) => setFilterParentCode(e.target.value)}
+                className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                <option value="">All ({parentRows.length})</option>
+                {parentRows.map((p) => (
+                  <option key={p.code} value={p.code}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <span className="text-xs text-slate-400">
+            {visibleRows.length} {visibleRows.length === 1 ? 'option' : 'options'}
+          </span>
+        </div>
+
         <button
           type="button"
           onClick={() => setEditing('new')}
-          className="flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+          className="h-8 px-3.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 transition-colors shadow-sm"
         >
-          <Plus className="w-4 h-4" />
-          New option
+          <Plus className="w-3.5 h-3.5" />
+          Add option
         </button>
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Label</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Code</th>
-              {isPriority && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Colour / Weight</th>}
-              {parentType && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Parent {MASTER_DATA_TYPE_LABELS[parentType]}</th>}
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Order</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs text-slate-500 uppercase">
+            <tr>
+              <th className="px-4 py-3">Label</th>
+              <th className="px-4 py-3">Code</th>
+              {isPriority && <th className="px-4 py-3">Colour / Weight</th>}
+              {isTaxRate && <th className="px-4 py-3">Tax Rate (%)</th>}
+              {parentType && <th className="px-4 py-3">{MASTER_DATA_TYPE_LABELS[parentType]}</th>}
+              <th className="px-4 py-3">Order</th>
+              <th className="px-4 py-3">Status</th>
               <th className="w-24" />
             </tr>
           </thead>
@@ -334,6 +370,11 @@ export default function MasterDataManager() {
                     {row.color ?? '—'}{row.weight != null ? ` · ${row.weight}` : ''}
                   </td>
                 )}
+                {isTaxRate && (
+                  <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {row.weight != null ? `${row.weight}%` : '—'}
+                  </td>
+                )}
                 {parentType && (
                   <td className="px-4 py-3 text-xs text-slate-500">
                     {row.parentCode ? (parentLabels[row.parentCode] ?? row.parentCode) : '—'}
@@ -343,25 +384,37 @@ export default function MasterDataManager() {
                 <td className="px-4 py-3">
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium',
                     row.isActive
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                       : 'bg-slate-100 text-slate-500 dark:bg-slate-800'
                   )}>
                     {row.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 justify-end">
-                    <button type="button" onClick={() => setEditing(row)} title="Edit"
-                      className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggle(row._id, row.isActive)}
+                      title={row.isActive ? 'Deactivate' : 'Activate'}
+                      className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    >
+                      {row.isActive ? <ToggleRight className="w-4 h-4 text-green-600" /> : <ToggleLeft className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(row)}
+                      title="Edit"
+                      className="p-1 rounded text-slate-400 hover:text-indigo-600 transition-colors"
+                    >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button type="button" onClick={() => handleToggle(row._id, row.isActive)} title={row.isActive ? 'Deactivate' : 'Activate'}
-                      className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors">
-                      {row.isActive ? <ToggleRight className="w-4 h-4 text-green-500" /> : <ToggleLeft className="w-4 h-4" />}
-                    </button>
                     {!row.isSystem && (
-                      <button type="button" onClick={() => handleDelete(row)} title="Delete"
-                        className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(row)}
+                        title="Delete"
+                        className="p-1 rounded text-slate-400 hover:text-red-600 transition-colors"
+                      >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -373,7 +426,7 @@ export default function MasterDataManager() {
         </table>
       </div>
 
-      {editing !== null && (
+      {editing && (
         <RowForm
           type={activeType}
           row={editing === 'new' ? undefined : editing}

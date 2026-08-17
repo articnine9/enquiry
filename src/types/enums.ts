@@ -212,6 +212,13 @@ export enum ActivityAction {
   CallReceived      = 'call.received',
   // Note actions
   NoteAdded         = 'note.added',
+  // Inventory actions
+  ProductCreated    = 'inventory.product_created',
+  ProductUpdated    = 'inventory.product_updated',
+  StockInward       = 'inventory.stock_inward',
+  StockOutward      = 'inventory.stock_outward',
+  StockTransfer     = 'inventory.stock_transfer',
+  StockAdjusted     = 'inventory.stock_adjusted',
   // User actions
   UserCreated       = 'user.created',
   UserUpdated       = 'user.updated',
@@ -225,14 +232,17 @@ export enum ActivityAction {
 }
 
 export enum EntityType {
-  Enquiry    = 'enquiry',
-  FollowUp   = 'followup',
-  User       = 'user',
-  Assignment = 'assignment',
-  Session    = 'session',
-  FieldVisit = 'field_visit',
-  Complaint  = 'complaint',
-  VoiceNote  = 'voice_note',
+  Enquiry          = 'enquiry',
+  FollowUp         = 'followup',
+  User             = 'user',
+  Assignment       = 'assignment',
+  Session          = 'session',
+  FieldVisit       = 'field_visit',
+  Complaint        = 'complaint',
+  VoiceNote        = 'voice_note',
+  Product          = 'product',
+  Warehouse        = 'warehouse',
+  StockTransaction = 'stock_transaction',
 }
 
 export enum NotificationType {
@@ -362,4 +372,64 @@ export const ALLOWED_TRANSITIONS: Partial<Record<EnquiryStatus, EnquiryStatus[]>
   [EnquiryStatus.Resolved]:   [EnquiryStatus.Closed,     EnquiryStatus.InProgress],
   [EnquiryStatus.Closed]:     [],
   [EnquiryStatus.Cancelled]:  [],
+}
+
+// ── Inventory Enums ───────────────────────────────────────────────────────────
+
+export enum ProductUOM {
+  Kg      = 'kg',
+  Bags    = 'bags',
+  Litres  = 'litres',
+  Bottles = 'bottles',
+  Boxes   = 'boxes',
+  Units   = 'units',
+  Packs   = 'packs',
+  Tonnes  = 'tonnes',
+  Grams   = 'grams',
+  Ml      = 'ml',
+}
+
+export const PRODUCT_UOM_LABELS: Record<ProductUOM, string> = {
+  [ProductUOM.Kg]:      'Kilograms (kg)',
+  [ProductUOM.Bags]:    'Bags',
+  [ProductUOM.Litres]:  'Litres (L)',
+  [ProductUOM.Bottles]: 'Bottles',
+  [ProductUOM.Boxes]:   'Boxes',
+  [ProductUOM.Units]:   'Units / Pieces',
+  [ProductUOM.Packs]:   'Packs',
+  [ProductUOM.Tonnes]:  'Tonnes (MT)',
+  [ProductUOM.Grams]:   'Grams (g)',
+  [ProductUOM.Ml]:      'Millilitres (ml)',
+}
+
+export enum WarehouseType {
+  Central          = 'central',
+  RegionalHub      = 'regional_hub',
+  DistributorDepot = 'distributor_depot',
+  Transit          = 'transit',
+}
+
+export const WAREHOUSE_TYPE_LABELS: Record<WarehouseType, string> = {
+  [WarehouseType.Central]:          'Central Warehouse',
+  [WarehouseType.RegionalHub]:      'Regional Hub',
+  [WarehouseType.DistributorDepot]: 'Distributor Depot',
+  [WarehouseType.Transit]:          'In-Transit Stock',
+}
+
+export enum StockTransactionType {
+  InwardPurchase    = 'inward_purchase',
+  OutwardDispatch   = 'outward_dispatch',
+  OutwardSample     = 'outward_sample',
+  Transfer          = 'transfer',
+  AdjustmentLoss    = 'adjustment_loss',
+  AdjustmentSurplus = 'adjustment_surplus',
+}
+
+export const STOCK_TRANSACTION_TYPE_LABELS: Record<StockTransactionType, string> = {
+  [StockTransactionType.InwardPurchase]:    'Goods Receipt / Purchase Inward',
+  [StockTransactionType.OutwardDispatch]:   'Sales Order Dispatch',
+  [StockTransactionType.OutwardSample]:     'Field Sample / Demo Issue',
+  [StockTransactionType.Transfer]:          'Warehouse Transfer',
+  [StockTransactionType.AdjustmentLoss]:    'Adjustment (Loss / Damage / Expired)',
+  [StockTransactionType.AdjustmentSurplus]: 'Adjustment (Audit Surplus)',
 }

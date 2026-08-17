@@ -29,6 +29,7 @@ const PRIORITY_META: Record<string, { color: string; weight: number }> = {
 interface SeedMaster {
   type: MasterDataType; code: string; label: string
   sortOrder: number; color?: string; weight?: number
+  parentCode?: string
 }
 
 // Default resolution-time targets per priority, in minutes.
@@ -53,6 +54,53 @@ const SEED_MASTER_DATA: SeedMaster[] = [
     type: 'enquiry_priority' as const, code: v, label: ENQUIRY_PRIORITY_LABELS[v],
     sortOrder: i, color: PRIORITY_META[v].color, weight: PRIORITY_META[v].weight,
   })),
+  // ── Inventory Master Data ──────────────────────────────────────────────────
+  { type: 'inventory_product_category', code: 'poultry_feed', label: 'Poultry Feed', sortOrder: 1 },
+  { type: 'inventory_product_category', code: 'cattle_feed', label: 'Cattle Feed', sortOrder: 2 },
+  { type: 'inventory_product_category', code: 'medicines', label: 'Veterinary Medicines', sortOrder: 3 },
+  { type: 'inventory_product_category', code: 'supplements', label: 'Feed Supplements & Premix', sortOrder: 4 },
+  { type: 'inventory_product_category', code: 'equipment', label: 'Farm Equipment & Tools', sortOrder: 5 },
+  { type: 'inventory_product_category', code: 'biosecurity', label: 'Biosecurity & Sanitizers', sortOrder: 6 },
+
+  // Subcategories
+  { type: 'inventory_product_subcategory', code: 'broiler_starter', label: 'Broiler Starter', parentCode: 'poultry_feed', sortOrder: 1 },
+  { type: 'inventory_product_subcategory', code: 'broiler_finisher', label: 'Broiler Finisher', parentCode: 'poultry_feed', sortOrder: 2 },
+  { type: 'inventory_product_subcategory', code: 'layer_mash', label: 'Layer Mash', parentCode: 'poultry_feed', sortOrder: 3 },
+  { type: 'inventory_product_subcategory', code: 'antibiotics', label: 'Antibiotics', parentCode: 'medicines', sortOrder: 1 },
+  { type: 'inventory_product_subcategory', code: 'dewormers', label: 'Dewormers', parentCode: 'medicines', sortOrder: 2 },
+  { type: 'inventory_product_subcategory', code: 'vitamins', label: 'Vitamins & Minerals', parentCode: 'supplements', sortOrder: 1 },
+
+  // UOMs
+  { type: 'inventory_uom', code: 'kg', label: 'Kilograms (kg)', sortOrder: 1 },
+  { type: 'inventory_uom', code: 'bags', label: 'Bags (50kg / 25kg)', sortOrder: 2 },
+  { type: 'inventory_uom', code: 'litres', label: 'Litres (L)', sortOrder: 3 },
+  { type: 'inventory_uom', code: 'bottles', label: 'Bottles', sortOrder: 4 },
+  { type: 'inventory_uom', code: 'boxes', label: 'Boxes / Cartons', sortOrder: 5 },
+  { type: 'inventory_uom', code: 'units', label: 'Units / Pieces', sortOrder: 6 },
+  { type: 'inventory_uom', code: 'tonnes', label: 'Metric Tonnes (MT)', sortOrder: 7 },
+  { type: 'inventory_uom', code: 'vials', label: 'Vials / Doses', sortOrder: 8 },
+
+  // Warehouse Types
+  { type: 'inventory_warehouse_type', code: 'central', label: 'Central Warehouse (HQ)', sortOrder: 1 },
+  { type: 'inventory_warehouse_type', code: 'regional_hub', label: 'Regional Hub / Depot', sortOrder: 2 },
+  { type: 'inventory_warehouse_type', code: 'distributor_depot', label: 'Distributor Stock Point', sortOrder: 3 },
+  { type: 'inventory_warehouse_type', code: 'cold_storage', label: 'Cold Storage Facility', sortOrder: 4 },
+  { type: 'inventory_warehouse_type', code: 'transit', label: 'In-Transit Van / Vehicle Stock', sortOrder: 5 },
+
+  // Stock Adjustment Reasons
+  { type: 'inventory_adjustment_reason', code: 'damage_in_transit', label: 'Damage during transport / handling', sortOrder: 1 },
+  { type: 'inventory_adjustment_reason', code: 'expired_writeoff', label: 'Expired batch disposal', sortOrder: 2 },
+  { type: 'inventory_adjustment_reason', code: 'audit_shortage', label: 'Physical count shortage', sortOrder: 3 },
+  { type: 'inventory_adjustment_reason', code: 'audit_surplus', label: 'Physical count surplus (found in count)', sortOrder: 4 },
+  { type: 'inventory_adjustment_reason', code: 'qc_rejection', label: 'Quality control / Laboratory rejection', sortOrder: 5 },
+  { type: 'inventory_adjustment_reason', code: 'field_sample', label: 'Demonstration & field sample issue', sortOrder: 6 },
+
+  // Tax Rates
+  { type: 'inventory_tax_rate', code: 'tax_0', label: '0% (Exempt / Nil Rated)', weight: 0, sortOrder: 1 },
+  { type: 'inventory_tax_rate', code: 'tax_5', label: '5% GST', weight: 5, sortOrder: 2 },
+  { type: 'inventory_tax_rate', code: 'tax_12', label: '12% GST', weight: 12, sortOrder: 3 },
+  { type: 'inventory_tax_rate', code: 'tax_18', label: '18% GST', weight: 18, sortOrder: 4 },
+  { type: 'inventory_tax_rate', code: 'tax_28', label: '28% GST', weight: 28, sortOrder: 5 },
 ]
 
 const SEED_ROLES = [

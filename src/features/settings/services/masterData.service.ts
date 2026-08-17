@@ -24,10 +24,6 @@ interface MasterRow extends MasterOption {
 // Display code→label resolution needs inactive rows too (an old enquiry may
 // reference a value an admin has since disabled), so we load the full set once
 // per type and derive both the option list and the label map from it.
-//
-// React `cache()` dedupes calls within a single request/render but re-queries on
-// the next request, so admin edits (and direct DB seeds) show up immediately —
-// no cross-request cache to go stale.
 
 const allCached = cache(async (type: MasterDataType): Promise<MasterRow[]> => {
   await dbConnect()
@@ -96,7 +92,36 @@ export async function getEnquiryFormOptions(): Promise<{
   }
 }
 
-/** code → label map (includes inactive) for rendering stored enquiry values. */
+/** All active option sets for the inventory forms and dropdowns. */
+export async function getInventoryFormOptions(): Promise<{
+  categories:         MasterOption[]
+  subCategories:      MasterSubOption[]
+  uoms:               MasterOption[]
+  warehouseTypes:     MasterOption[]
+  adjustmentReasons:  MasterOption[]
+  taxRates:           MasterOption[]
+}> {
+  const [
+    categories, subCategories, uoms, warehouseTypes, adjustmentReasons, taxRates,
+  ] = await Promise.all([
+    getMasterOptions('inventory_product_category'),
+    getMasterSubOptions('inventory_product_subcategory'),
+    getMasterOptions('inventory_uom'),
+    getMasterOptions('inventory_warehouse_type'),
+    getMasterOptions('inventory_adjustment_reason'),
+    getMasterOptions('inventory_tax_rate'),
+  ])
+  return {
+    categories,
+    subCategories,
+    uoms,
+    warehouseTypes,
+    adjustmentReasons,
+    taxRates,
+  }
+}
+
+/** code → label map (includes inactive) for rendering stored enquiry/inventory values. */
 export async function getMasterLabelMap(
   type: MasterDataType
 ): Promise<Record<string, string>> {

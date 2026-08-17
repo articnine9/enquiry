@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ClipboardList, Users, MapPin,
   BarChart3, Bell, Shield, Settings, ChevronLeft,
   CalendarClock, Activity, Truck, Users2, Footprints,
-  MessageSquareWarning,
+  MessageSquareWarning, Boxes,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -49,6 +49,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Assignments',
     icon:  MapPin,
     roles: [UserRole.SuperAdmin, UserRole.Manager],
+  },
+  {
+    href:  '/inventory',
+    label: 'Inventory',
+    icon:  Boxes,
+    roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
   },
   {
     href:  '/distributors',
