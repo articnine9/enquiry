@@ -10,6 +10,7 @@ import { useDashboardStore, useManagerDash } from '@/store/dashboard.store'
 import { getManagerDashboardAction } from '../actions/dashboard.actions'
 import StatCard from './StatCard'
 import ManagementSnapshot from './ManagementSnapshot'
+import InventoryOverviewCard from './InventoryOverviewCard'
 import DonutChart from './DonutChart'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/utils'
@@ -313,6 +314,9 @@ export default function ManagerDashboard() {
         </div>
         <OldestPendingList />
       </div>
+
+      {/* ── Row 6: Inventory overview ────────────────────────────────────── */}
+      <InventoryOverviewCard />
 
     </div>
   )

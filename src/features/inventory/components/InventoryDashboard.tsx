@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   Boxes,
   Plus,
@@ -52,8 +53,12 @@ import { getInventoryMasterOptionsAction } from '@/features/settings/actions/mas
 
 type ActiveTab = 'products' | 'movements' | 'warehouses' | 'alerts'
 
+const VALID_TABS: ActiveTab[] = ['products', 'movements', 'warehouses', 'alerts']
+
 export default function InventoryDashboard() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('products')
+  const searchParams = useSearchParams()
+  const initialTab = VALID_TABS.find((t) => t === searchParams.get('tab')) ?? 'products'
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab)
 
   // Overview Data
   const [stats, setStats] = useState<InventoryStats | null>(null)

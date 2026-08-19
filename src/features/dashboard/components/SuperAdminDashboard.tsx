@@ -13,6 +13,7 @@ import DonutChart from './DonutChart'
 import MiniBarChart from './MiniBarChart'
 import TrendLineChart from './TrendLineChart'
 import ManagementSnapshot from './ManagementSnapshot'
+import InventoryOverviewCard from './InventoryOverviewCard'
 import { cn } from '@/lib/utils'
 
 // ── Status colours ────────────────────────────────────────────────────────────
@@ -276,6 +277,9 @@ export default function SuperAdminDashboard() {
           ))}
         </div>
       </div>
+
+      {/* ── Row 6: Inventory overview ────────────────────────────────────── */}
+      <InventoryOverviewCard />
 
     </div>
   )
