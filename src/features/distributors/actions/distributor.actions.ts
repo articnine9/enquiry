@@ -25,6 +25,7 @@ export interface DistributorRow {
   contactEmail?:     string
   address?:          string
   assignedDistricts: string[]
+  assignedTaluks:    string[]
   isActive:          boolean
   dealerCount:       number
   createdAt:         string
@@ -35,6 +36,7 @@ export interface DistributorOption {
   name:              string
   code:              string
   assignedDistricts: string[]
+  assignedTaluks:    string[]
 }
 
 // ── List ───────────────────────────────────────────────────────────────────────
@@ -65,6 +67,7 @@ export async function getDistributorsAction(): Promise<ActionResult<DistributorR
         contactEmail:      d.contactEmail,
         address:           d.address,
         assignedDistricts: d.assignedDistricts ?? [],
+        assignedTaluks:    d.assignedTaluks ?? [],
         isActive:          d.isActive,
         dealerCount:       countMap.get(String(d._id)) ?? 0,
         createdAt:         String(d.createdAt),
@@ -100,6 +103,7 @@ export async function getDistributorAction(id: string): Promise<ActionResult<Dis
         contactEmail:      d.contactEmail,
         address:           d.address,
         assignedDistricts: d.assignedDistricts ?? [],
+        assignedTaluks:    d.assignedTaluks ?? [],
         isActive:          d.isActive,
         dealerCount,
         createdAt:         String(d.createdAt),
@@ -117,14 +121,16 @@ export async function getDistributorsForSelectAction(): Promise<ActionResult<Dis
     await dbConnect()
 
     const distributors = await Distributor.find({ isActive: true })
-      .select('name code assignedDistricts')
+      .select('name code assignedDistricts assignedTaluks')
       .sort({ name: 1 })
       .lean()
 
     return {
       ok: true,
       data: toPlain(distributors.map((d) => ({
-        _id: String(d._id), name: d.name, code: d.code, assignedDistricts: d.assignedDistricts ?? [],
+        _id: String(d._id), name: d.name, code: d.code,
+        assignedDistricts: d.assignedDistricts ?? [],
+        assignedTaluks:    d.assignedTaluks ?? [],
       }))),
     }
   } catch (err: unknown) {

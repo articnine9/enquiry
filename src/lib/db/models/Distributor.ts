@@ -15,6 +15,11 @@ export interface IDistributor {
   contactEmail?:    string
   address?:         string
   assignedDistricts: string[]       // from the South India district dataset
+  // Optional taluk-level scoping (matches Enquiry.taluks label text) — used to
+  // disambiguate when more than one distributor shares the same district
+  // (e.g. "Coimbatore North" vs "Pollachi" both within Coimbatore district).
+  // Empty means the distributor claims the whole district, unscoped.
+  assignedTaluks?:  string[]
   isActive:         boolean
   createdAt:        Date
   updatedAt:        Date
@@ -71,6 +76,10 @@ const DistributorSchema = new Schema<DistributorDocument>(
       type:    [String],
       default: [],
     },
+    assignedTaluks: {
+      type:    [String],
+      default: [],
+    },
     isActive: { type: Boolean, default: true },
   },
   {
@@ -85,6 +94,7 @@ const DistributorSchema = new Schema<DistributorDocument>(
 
 DistributorSchema.index({ code: 1 }, { unique: true })
 DistributorSchema.index({ assignedDistricts: 1 })
+DistributorSchema.index({ assignedTaluks: 1 })
 DistributorSchema.index({ isActive: 1, name: 1 })
 
 // ─── Virtuals ─────────────────────────────────────────────────────────────────

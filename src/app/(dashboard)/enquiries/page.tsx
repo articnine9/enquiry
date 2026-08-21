@@ -6,6 +6,7 @@ import { getEnquiries, getEnquiryStats } from '@/features/enquiries/actions/enqu
 import EnquiryFilters from '@/features/enquiries/components/EnquiryFilters'
 import EnquiryTableContainer from '@/features/enquiries/components/EnquiryTableContainer'
 import EnquiryStatsBar from '@/features/enquiries/components/EnquiryStatsBar'
+import ImportEnquiriesButton from '@/features/enquiries/components/ImportEnquiriesButton'
 import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
@@ -36,7 +37,7 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
       slaStatus:     sp('slaStatus') as never,
       distributorId: sp('distributorId'),
       dealerId:      sp('dealerId'),
-      city:          sp('city'),
+      taluk:         sp('taluk'),
       page:          sp('page') ? Number(sp('page')) : 1,
       pageSize:      sp('pageSize') ? Number(sp('pageSize')) : 20,
       sortBy:        (sp('sortBy') ?? 'createdAt') as never,
@@ -62,13 +63,16 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
         </div>
 
         {canCreate && (
-          <Link
-            href="/enquiries/new"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            New Enquiry
-          </Link>
+          <div className="flex items-center gap-2">
+            <ImportEnquiriesButton />
+            <Link
+              href="/enquiries/new"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New Enquiry
+            </Link>
+          </div>
         )}
       </div>
 

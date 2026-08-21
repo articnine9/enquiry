@@ -11,6 +11,7 @@ import {
   toggleDistributorActiveAction, deleteDistributorAction,
   type DistributorRow,
 } from '../actions/distributor.actions'
+import { getMasterDataAction } from '@/features/settings/actions/masterData.actions'
 
 // ── Row form dialog ────────────────────────────────────────────────────────────
 
@@ -65,6 +66,72 @@ function DistrictMultiPicker({
   )
 }
 
+/** Taluks scoped to the currently-selected districts — resolved via MasterData
+ * so the picker only offers taluks that actually belong to one of them. */
+function TalukMultiPicker({
+  districts, selected, onChange,
+}: {
+  districts: string[]
+  selected:  string[]
+  onChange:  (next: string[]) => void
+}) {
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([])
+  const [picker, setPicker]   = useState('')
+
+  useEffect(() => {
+    if (districts.length === 0) { setOptions([]); return }
+    Promise.all([getMasterDataAction('district'), getMasterDataAction('taluk')]).then(([distRes, talukRes]) => {
+      if (!distRes.ok || !talukRes.ok) return
+      const districtCodes = new Set(
+        distRes.data
+          .filter((d) => districts.some((name) => name.toLowerCase() === d.label.toLowerCase()))
+          .map((d) => d.code)
+      )
+      setOptions(
+        talukRes.data
+          .filter((t) => t.isActive && t.parentCode && districtCodes.has(t.parentCode))
+          .map((t) => ({ value: t.label, label: t.label }))
+      )
+    })
+  }, [districts])
+
+  function add(value: string) {
+    if (!value || selected.includes(value)) return
+    onChange([...selected, value])
+    setPicker('')
+  }
+  function remove(value: string) {
+    onChange(selected.filter((t) => t !== value))
+  }
+
+  return (
+    <div className="space-y-2">
+      <Combobox
+        id="assignedTaluks" name="__talukPicker"
+        options={options.filter((o) => !selected.includes(o.value))}
+        value={picker}
+        onChange={add}
+        placeholder={districts.length === 0 ? 'Assign a district first' : 'Add a taluk…'}
+        searchPlaceholder="Search taluk…"
+        emptyText="No taluk found for the assigned districts"
+        disabled={districts.length === 0}
+      />
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((t) => (
+            <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+              {t}
+              <button type="button" onClick={() => remove(t)} className="hover:text-red-600">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RowForm({ row, onSave, onCancel }: RowFormProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +144,7 @@ function RowForm({ row, onSave, onCancel }: RowFormProps) {
     contactEmail:      row?.contactEmail      ?? '',
     address:           row?.address           ?? '',
     assignedDistricts: row?.assignedDistricts ?? [] as string[],
+    assignedTaluks:    row?.assignedTaluks    ?? [] as string[],
     isActive:          row?.isActive          ?? true,
   })
 
@@ -97,6 +165,7 @@ function RowForm({ row, onSave, onCancel }: RowFormProps) {
       contactEmail:      form.contactEmail || undefined,
       address:           form.address || undefined,
       assignedDistricts: form.assignedDistricts,
+      assignedTaluks:    form.assignedTaluks,
       isActive:          form.isActive,
     }
 
@@ -169,6 +238,17 @@ function RowForm({ row, onSave, onCancel }: RowFormProps) {
               <label className={LABEL}>Assigned districts</label>
               <DistrictMultiPicker selected={form.assignedDistricts} onChange={(v) => set('assignedDistricts', v)} />
               <p className="mt-1 text-[11px] text-slate-400">Dealers under this distributor can only service districts assigned here.</p>
+            </div>
+            <div className="col-span-2">
+              <label className={LABEL}>Assigned taluks (optional)</label>
+              <TalukMultiPicker
+                districts={form.assignedDistricts}
+                selected={form.assignedTaluks}
+                onChange={(v) => set('assignedTaluks', v)}
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Only needed if another distributor also covers one of the districts above — scopes this one to specific taluks so enquiries route correctly.
+              </p>
             </div>
             <div className="col-span-2 flex items-center">
               <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -284,7 +364,14 @@ export default function DistributorManager() {
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{row.territory}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{row.assignedDistricts.length} district{row.assignedDistricts.length === 1 ? '' : 's'}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {row.assignedDistricts.length} district{row.assignedDistricts.length === 1 ? '' : 's'}
+                  {row.assignedTaluks.length > 0 && (
+                    <span className="ml-1 text-purple-500 dark:text-purple-400">
+                      · {row.assignedTaluks.length} taluk{row.assignedTaluks.length === 1 ? '' : 's'} scoped
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{row.dealerCount}</td>
                 <td className="px-4 py-3">
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium',

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { User, Lock, Database, Timer, ChevronRight, ShieldCheck } from 'lucide-react'
+import { User, Lock, Database, Timer, ChevronRight, ShieldCheck, Trash2 } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { getInitials } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.Staff]:      'Staff',
 }
 
-type Group = 'account' | 'admin'
+type Group = 'account' | 'admin' | 'danger'
 
 interface SettingCard {
   href:      string
@@ -68,11 +68,22 @@ const CARDS: SettingCard[] = [
     group:     'admin',
     roles:     [UserRole.SuperAdmin],
   },
+  {
+    href:      '/settings/data-management',
+    icon:      Trash2,
+    iconBg:    'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+    title:     'Data Management',
+    desc:      'Permanently delete enquiries or users — irreversible',
+    group:     'danger',
+    roles:     [UserRole.SuperAdmin],
+  },
 ]
 
 const GROUP_META: Record<Group, { label: string; hint: string }> = {
   account: { label: 'Account',        hint: 'Your personal details and sign-in' },
   admin:   { label: 'Administration', hint: 'Workspace configuration' },
+  danger:  { label: 'Danger Zone',    hint: 'Destructive, irreversible actions' },
 }
 
 export default async function SettingsPage() {
@@ -80,7 +91,7 @@ export default async function SettingsPage() {
   const { name, email, role } = session.user
 
   const visible = CARDS.filter((c) => c.roles.includes(role))
-  const groups: Group[] = ['account', 'admin']
+  const groups: Group[] = ['account', 'admin', 'danger']
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-8">

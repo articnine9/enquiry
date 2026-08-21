@@ -2,9 +2,10 @@
 
 import { useCallback } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { Search, SlidersHorizontal, X, Download, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDebounce } from '@/hooks/useDebounce'
-import { useEnquiryStore } from '@/store/enquiry.store'
+import { useEnquiryStore, rehydrateEnquiryStore } from '@/store/enquiry.store'
 import { cn } from '@/lib/utils'
 import {
   EnquiryStatus, EnquiryPriority, EnquirySource, EnquiryProduct, LeadStage,
@@ -16,6 +17,8 @@ import type { EnquiryFilterInput } from '../validations/enquiry.schema'
 import { useEffect, useState } from 'react'
 import { getDistributorsForSelectAction } from '@/features/distributors/actions/distributor.actions'
 import { getDealersByDistributorAction } from '@/features/distributors/actions/dealer.actions'
+import { exportEnquiriesAction } from '../actions/enquiry.actions'
+import { exportEnquiryListRows } from '../utils/csv-export'
 
 // Enum-derived fallbacks — used when master-data options aren't supplied.
 const FALLBACK_PRIORITY = Object.values(EnquiryPriority).map((v) => ({ value: v, label: ENQUIRY_PRIORITY_LABELS[v] }))
@@ -45,6 +48,11 @@ function useFilterSync() {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
   const { filters, setFilter, resetFilters } = useEnquiryStore()
+
+  // The store's persisted filters are skipped during SSR/first paint to avoid
+  // a hydration mismatch (server has no localStorage) — apply them now that
+  // we're safely past hydration.
+  useEffect(() => { rehydrateEnquiryStore() }, [])
 
   const pushParams = useCallback(
     (key: string, value: string) => {
@@ -114,6 +122,24 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
        filters.product || filters.taluk || filters.search || filters.slaStatus ||
        filters.distributorId || filters.dealerId)
 
+  const [isExporting, setIsExporting] = useState(false)
+
+  async function handleExport() {
+    setIsExporting(true)
+    const result = await exportEnquiriesAction(Object.fromEntries(searchParams.entries()))
+    setIsExporting(false)
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
+    if (result.data.length === 0) {
+      toast.info('No enquiries match the current filters')
+      return
+    }
+    exportEnquiryListRows(result.data, `enquiries-${new Date().toISOString().slice(0, 10)}.csv`)
+    toast.success(`Exported ${result.data.length} enquir${result.data.length === 1 ? 'y' : 'ies'}`)
+  }
+
   return (
     <div className="space-y-3">
       {/* ── Row 1: Search + Reset ──────────────────────────────────────────── */}
@@ -153,6 +179,17 @@ export default function EnquiryFilters({ options }: { options?: EnquiryFilterOpt
             Clear all
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={isExporting}
+          title="Export enquiries matching the current filters as CSV"
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+        >
+          {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          Export
+        </button>
       </div>
 
       {/* ── Row 2: Filter selects ──────────────────────────────────────────── */}

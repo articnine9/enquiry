@@ -28,6 +28,7 @@ export const DistributorInputSchema = z.object({
   contactEmail: emailField,
   address:      z.string().trim().max(300).optional().or(z.literal('')),
   assignedDistricts: z.array(z.string().trim().min(1)).default([]),
+  assignedTaluks:    z.array(z.string().trim().min(1)).default([]),
   isActive: z.boolean().default(true),
 })
 

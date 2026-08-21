@@ -136,6 +136,19 @@ export const useEnquiryStore = create<EnquiryState>()(
           page:   1,         // always reset page on reload
         },
       }),
+      // The server has no localStorage, so it always renders DEFAULT_FILTERS.
+      // Auto-rehydrating on the client (zustand's default) would apply the
+      // persisted filters before React's first paint, mismatching the SSR
+      // markup — skip it here and rehydrate explicitly post-mount instead
+      // (see useEnquiryStoreHydration below), so first paint matches the
+      // server on both sides and the persisted filters apply a beat later.
+      skipHydration: true,
     }
   )
 )
+
+// ── SSR-safe hydration ──────────────────────────────────────────────────────
+// Call once, client-side only (e.g. in EnquiryFilters), after mount.
+export function rehydrateEnquiryStore(): void {
+  useEnquiryStore.persist.rehydrate()
+}

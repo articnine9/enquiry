@@ -16,12 +16,14 @@ import { checkAndNotifyEscalations, type EscalationCandidate } from '../services
 import { computeSlaDueAt, SLA_AT_RISK_RATIO } from '@/lib/sla'
 import type { MasterDataType } from '@/lib/db/models/MasterData'
 import { CACHE_TAGS } from '@/lib/cache'
+import { ENQUIRY_CSV_COLUMNS } from '../utils/csv-export'
 import {
   CreateEnquirySchema,
   UpdateEnquirySchema,
   UpdateStatusSchema,
   EnquiryFilterSchema,
   ReassignEnquirySchema,
+  type CreateEnquiryInput,
 } from '../validations/enquiry.schema'
 import {
   ActivityAction,
@@ -111,8 +113,71 @@ async function validateMasterFields(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CREATE
+// CREATE — shared core, used by both the single-enquiry form and bulk import.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Bulk import awaits auto-assignment (so staff load-balancing stays accurate
+// across a whole batch processed back-to-back); the manual form fires it
+// off in the background instead, since a single create shouldn't make the
+// user wait on it.
+async function createValidatedEnquiry(
+  input: CreateEnquiryInput,
+  session: SessionUser,
+  opts: { awaitAutoAssign?: boolean } = {}
+): Promise<ActionResult<EnquiryDocument>> {
+  const master = await validateMasterFields(input)
+  if (!master.ok) {
+    return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors, values: input }
+  }
+
+  const now    = new Date()
+  const policy = await resolveSlaPolicy(input.priority, input.category)
+  // City-tier matching dropped — Enquiry no longer captures a city/town
+  // value; taluks (a different administrative level) are passed instead so
+  // distributors that share a district can be disambiguated by taluk scope.
+  const channel = await resolveChannelByArea({ district: input.district, taluks: input.taluks })
+
+  const enquiry = await Enquiry.create({
+    ...input,
+    priorityWeight: master.priorityWeight ?? 2,
+    slaPolicyId:    policy.policyId,
+    slaDueAt:       computeSlaDueAt(now, policy.resolutionMinutes),
+    distributorId:  channel.distributorId ?? null,
+    dealerId:       channel.dealerId ?? null,
+    createdBy:      session.user.id,
+  })
+
+  // Attempt auto-assignment. No city-tier match anymore (see resolveChannelByArea
+  // call above for why) — falls back to district/pincode-level staff coverage.
+  const assignParams = {
+    enquiryId: String(enquiry._id),
+    pincode:   input.pincode ?? '',
+    district:  input.district,
+    actorId:   session.user.id,
+    actorRole: session.user.role,
+  }
+  if (opts.awaitAutoAssign) {
+    const r = await autoAssign(assignParams).catch((err) => {
+      console.error(`Auto-assign threw for ${enquiry._id}:`, err)
+      return null
+    })
+    if (r && !r.ok) console.error(`Auto-assign failed for ${enquiry._id}:`, r.error)
+  } else {
+    autoAssign(assignParams)
+      .then((r) => { if (!r.ok) console.error(`Auto-assign failed for ${enquiry._id}:`, r.error) })
+      .catch((err) => console.error(`Auto-assign threw for ${enquiry._id}:`, err))
+  }
+
+  await ActivityLog.create({
+    actorId:    session.user.id,
+    actorRole:  session.user.role,
+    action:     ActivityAction.EnquiryCreated,
+    entityType: EntityType.Enquiry,
+    entityId:   enquiry._id,
+  })
+
+  return { ok: true, data: toPlain(enquiry) }
+}
 
 export async function createEnquiry(
   _prev: ActionResult<EnquiryDocument> | null,
@@ -144,54 +209,13 @@ export async function createEnquiry(
 
     await dbConnect()
 
-    const master = await validateMasterFields(parsed.data)
-    if (!master.ok) {
-      return { ok: false, error: 'Please fix the errors below', fieldErrors: master.fieldErrors, values: raw }
-    }
-
-    const now     = new Date()
-    const policy  = await resolveSlaPolicy(parsed.data.priority, parsed.data.category)
-    // City-tier matching dropped — Enquiry no longer captures a city/town
-    // value (replaced by Taluk, a different administrative level that
-    // doesn't match Dealer.serviceLocations' city entries). Falls back to
-    // district-level channel resolution.
-    const channel = await resolveChannelByArea({ district: parsed.data.district })
-
-    const enquiry = await Enquiry.create({
-      ...parsed.data,
-      priorityWeight: master.priorityWeight ?? 2,
-      slaPolicyId:    policy.policyId,
-      slaDueAt:       computeSlaDueAt(now, policy.resolutionMinutes),
-      distributorId:  channel.distributorId ?? null,
-      dealerId:       channel.dealerId ?? null,
-      createdBy:      session.user.id,
-    })
-
-    // Attempt auto-assignment — non-blocking. No city-tier match anymore
-    // (see resolveChannelByArea call above for why) — falls back to
-    // district/pincode-level staff coverage.
-    autoAssign({
-      enquiryId: String(enquiry._id),
-      pincode:   parsed.data.pincode ?? '',
-      district:  parsed.data.district,
-      actorId:   session.user.id,
-      actorRole: session.user.role,
-    })
-      .then((r) => { if (!r.ok) console.error(`Auto-assign failed for ${enquiry._id}:`, r.error) })
-      .catch((err) => console.error(`Auto-assign threw for ${enquiry._id}:`, err))
-
-    await ActivityLog.create({
-      actorId:    session.user.id,
-      actorRole:  session.user.role,
-      action:     ActivityAction.EnquiryCreated,
-      entityType: EntityType.Enquiry,
-      entityId:   enquiry._id,
-    })
+    const result = await createValidatedEnquiry(parsed.data, session)
+    if (!result.ok) return { ...result, values: raw }
 
     revalidateTag(CACHE_TAGS.enquiries)
     revalidateTag(CACHE_TAGS.dashboard)
 
-    return { ok: true, data: toPlain(enquiry) }
+    return result
   } catch (err) {
     return authErrorToResult(err)
   }
@@ -261,11 +285,13 @@ export async function updateEnquiry(
       update.slaDueAt    = computeSlaDueAt(new Date(before.createdAt), policy.resolutionMinutes)
     }
 
-    // Re-resolve the distributor/dealer channel tag when district changes.
-    // District-only — see the create-side comment on why city-tier matching
-    // was dropped (Enquiry no longer captures a city/town value).
-    if (parsed.data.district != null) {
-      const channel = await resolveChannelByArea({ district: parsed.data.district })
+    // Re-resolve the distributor/dealer channel tag when district or taluks
+    // change — taluks now feed disambiguation for districts shared by more
+    // than one distributor (see distributor-matcher.service.ts).
+    if (parsed.data.district != null || parsed.data.taluks != null) {
+      const district = parsed.data.district ?? before.district
+      const taluks   = parsed.data.taluks   ?? before.taluks
+      const channel  = await resolveChannelByArea({ district, taluks })
       update.distributorId = channel.distributorId ?? null
       update.dealerId      = channel.dealerId ?? null
     }
@@ -512,6 +538,86 @@ export async function getEnquiryById(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared filter-building — used by both the paginated list and the export.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SessionUser = Awaited<ReturnType<typeof requirePermission>>
+
+function buildEnquiryFilter(
+  session: SessionUser,
+  parsed: Omit<import('../validations/enquiry.schema').EnquiryFilterInput, 'page' | 'pageSize' | 'sortBy' | 'sortOrder'>
+): FilterQuery<EnquiryDocument> {
+  const {
+    search, status, leadStage, priority, enquirySource, product,
+    category, businessCategory, businessSubCategory, assignedTo, taluk, district, distributorId, dealerId, slaStatus,
+    dateFrom, dateTo,
+  } = parsed
+
+  const filter: FilterQuery<EnquiryDocument> = {}
+
+  // Role scoping
+  if (session.user.role === UserRole.Staff) {
+    filter.assignedTo = session.user.id
+  } else if (session.user.role === UserRole.Manager && session.user.locationZoneId) {
+    // Manager sees all enquiries in their zone (via assigned staff's zone)
+    // Simplified: filter by createdBy location — refine with a $lookup if needed
+  }
+
+  if (search) {
+    filter.$text = { $search: search }
+  }
+  if (status)        filter.status        = status
+  if (leadStage)     filter.leadStage     = leadStage
+  if (priority)      filter.priority      = priority
+  if (enquirySource) filter.enquirySource = enquirySource
+  if (product)       filter.product       = product
+  if (category)      filter.category      = category
+  if (businessCategory)    filter.businessCategory    = businessCategory
+  if (businessSubCategory) filter.businessSubCategory = businessSubCategory
+  if (taluk)         filter.taluks        = { $regex: taluk, $options: 'i' }   // matches if any taluk in the array contains the text
+  if (district)      filter.district      = { $regex: district, $options: 'i' }
+  if (distributorId) filter.distributorId = distributorId
+  if (dealerId)      filter.dealerId      = dealerId
+  if (assignedTo && session.user.role !== UserRole.Staff) {
+    filter.assignedTo = assignedTo
+  }
+
+  if (slaStatus) {
+    const now = new Date()
+    if (slaStatus === 'met')    filter.slaMet = true
+    if (slaStatus === 'missed') filter.slaMet = false
+    if (slaStatus === 'breached') {
+      filter.slaMet   = null
+      filter.slaDueAt = { $lt: now, $ne: null }
+    }
+    if (slaStatus === 'at_risk') {
+      // Open, not yet due, but within the last SLA_AT_RISK_RATIO of its window.
+      filter.slaMet = null
+      filter.$expr = {
+        $and: [
+          { $ne: ['$slaDueAt', null] },
+          { $gte: ['$slaDueAt', now] },
+          {
+            $lte: [
+              { $subtract: ['$slaDueAt', now] },
+              { $multiply: [SLA_AT_RISK_RATIO, { $subtract: ['$slaDueAt', '$createdAt'] }] },
+            ],
+          },
+        ],
+      }
+    }
+  }
+  if (dateFrom || dateTo) {
+    filter.createdAt = {
+      ...(dateFrom ? { $gte: new Date(dateFrom) } : {}),
+      ...(dateTo   ? { $lte: new Date(dateTo + 'T23:59:59') } : {}),
+    }
+  }
+
+  return filter
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LIST (search + filter + paginate)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -526,75 +632,11 @@ export async function getEnquiries(
       return { ok: false, error: 'Invalid filter parameters' }
     }
 
-    const {
-      search, status, leadStage, priority, enquirySource, product,
-      category, businessCategory, businessSubCategory, assignedTo, taluk, district, distributorId, dealerId, slaStatus,
-      dateFrom, dateTo, page, pageSize, sortBy, sortOrder,
-    } = parsed.data
+    const { search, page, pageSize, sortBy, sortOrder } = parsed.data
 
     await dbConnect()
 
-    // ── Build filter ────────────────────────────────────────────────────────
-    const filter: FilterQuery<EnquiryDocument> = {}
-
-    // Role scoping
-    if (session.user.role === UserRole.Staff) {
-      filter.assignedTo = session.user.id
-    } else if (session.user.role === UserRole.Manager && session.user.locationZoneId) {
-      // Manager sees all enquiries in their zone (via assigned staff's zone)
-      // Simplified: filter by createdBy location — refine with a $lookup if needed
-    }
-
-    if (search) {
-      filter.$text = { $search: search }
-    }
-    if (status)        filter.status        = status
-    if (leadStage)     filter.leadStage     = leadStage
-    if (priority)      filter.priority      = priority
-    if (enquirySource) filter.enquirySource = enquirySource
-    if (product)       filter.product       = product
-    if (category)      filter.category      = category
-    if (businessCategory)    filter.businessCategory    = businessCategory
-    if (businessSubCategory) filter.businessSubCategory = businessSubCategory
-    if (taluk)         filter.taluks        = { $regex: taluk, $options: 'i' }   // matches if any taluk in the array contains the text
-    if (district)      filter.district      = { $regex: district, $options: 'i' }
-    if (distributorId) filter.distributorId = distributorId
-    if (dealerId)      filter.dealerId      = dealerId
-    if (assignedTo && session.user.role !== UserRole.Staff) {
-      filter.assignedTo = assignedTo
-    }
-
-    if (slaStatus) {
-      const now = new Date()
-      if (slaStatus === 'met')    filter.slaMet = true
-      if (slaStatus === 'missed') filter.slaMet = false
-      if (slaStatus === 'breached') {
-        filter.slaMet   = null
-        filter.slaDueAt = { $lt: now, $ne: null }
-      }
-      if (slaStatus === 'at_risk') {
-        // Open, not yet due, but within the last SLA_AT_RISK_RATIO of its window.
-        filter.slaMet = null
-        filter.$expr = {
-          $and: [
-            { $ne: ['$slaDueAt', null] },
-            { $gte: ['$slaDueAt', now] },
-            {
-              $lte: [
-                { $subtract: ['$slaDueAt', now] },
-                { $multiply: [SLA_AT_RISK_RATIO, { $subtract: ['$slaDueAt', '$createdAt'] }] },
-              ],
-            },
-          ],
-        }
-      }
-    }
-    if (dateFrom || dateTo) {
-      filter.createdAt = {
-        ...(dateFrom ? { $gte: new Date(dateFrom) } : {}),
-        ...(dateTo   ? { $lte: new Date(dateTo + 'T23:59:59') } : {}),
-      }
-    }
+    const filter = buildEnquiryFilter(session, parsed.data)
 
     const sortDir = sortOrder === 'asc' ? 1 : -1
     // Priority sorts by its denormalised severity rank, not the raw code string.
@@ -631,6 +673,234 @@ export async function getEnquiries(
         hasPrev:    page > 1,
       },
     }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT (all rows matching the current filters — not paginated)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EXPORT_ROW_CAP = 10_000
+
+export interface ExportEnquiryRow {
+  enquiryNo:     string
+  customerName:  string
+  phone:         string
+  email:         string
+  address:       string
+  state:         string
+  district:      string
+  taluks:        string
+  pincode:       string
+  location:      string
+  status:        string
+  leadStage:     string
+  priority:      string
+  enquirySource: string
+  businessCategory:    string
+  businessSubCategory: string
+  product:       string
+  category:      string
+  subject:       string
+  description:   string
+  tags:          string
+  slaMet:        string
+  distributor:   string
+  dealer:        string
+  assignedTo:    string
+  createdAt:     string
+}
+
+export async function exportEnquiriesAction(
+  rawParams: Record<string, unknown> = {}
+): Promise<ActionResult<ExportEnquiryRow[]>> {
+  try {
+    const session = await requirePermission('enquiry:read')
+
+    const parsed = EnquiryFilterSchema.safeParse(rawParams)
+    if (!parsed.success) {
+      return { ok: false, error: 'Invalid filter parameters' }
+    }
+
+    await dbConnect()
+
+    const filter = buildEnquiryFilter(session, parsed.data)
+
+    const total = await Enquiry.countDocuments(filter)
+    if (total > EXPORT_ROW_CAP) {
+      return {
+        ok: false,
+        error: `${total.toLocaleString()} enquiries match these filters — narrow them down below ${EXPORT_ROW_CAP.toLocaleString()} to export.`,
+      }
+    }
+
+    const rows = await Enquiry.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(EXPORT_ROW_CAP)
+      .populate('assignedTo', 'name')
+      .populate('distributorId', 'name')
+      .populate('dealerId', 'name')
+      .lean()
+
+    const data: ExportEnquiryRow[] = rows.map((e) => ({
+      enquiryNo:     e.enquiryNo,
+      customerName:  e.customerName,
+      phone:         e.phone,
+      email:         e.email ?? '',
+      address:       e.address,
+      state:         e.state ?? '',
+      district:      e.district,
+      taluks:        (e.taluks ?? []).join('; '),
+      pincode:       e.pincode ?? '',
+      location:      e.location,
+      status:        e.status,
+      leadStage:     e.leadStage,
+      priority:      e.priority,
+      enquirySource: e.enquirySource,
+      businessCategory:    e.businessCategory ?? '',
+      businessSubCategory: e.businessSubCategory ?? '',
+      product:       e.product,
+      category:      e.category,
+      subject:       e.subject,
+      description:   e.description ?? '',
+      tags:          (e.tags ?? []).join('; '),
+      slaMet:        e.slaMet == null ? 'Open' : e.slaMet ? 'Met' : 'Missed',
+      distributor:   (e.distributorId as unknown as { name?: string } | null)?.name ?? '',
+      dealer:        (e.dealerId as unknown as { name?: string } | null)?.name ?? '',
+      assignedTo:    (e.assignedTo as unknown as { name?: string } | null)?.name ?? '',
+      createdAt:     e.createdAt ? new Date(e.createdAt).toISOString() : '',
+    }))
+
+    return { ok: true, data: toPlain(data) }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORT (CSV → preview → commit)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const IMPORT_ROW_CAP = 500
+
+export interface ImportRowResult {
+  rowIndex:     number   // 1-based, matches the CSV's data rows (header excluded)
+  ok:           boolean
+  errors:       string[]
+  customerName: string
+  phone:        string
+  enquiryNo?:   string   // set once actually created (commit step only)
+}
+
+// Maps a CSV record (keyed by column label, as read off the header row) to
+// the subset of CreateEnquirySchema fields import actually writes — ignores
+// any read-only/export-only columns present (Enquiry No, Status, SLA, etc.),
+// so a re-exported file can be re-imported unedited.
+function mapImportRecord(record: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const col of ENQUIRY_CSV_COLUMNS) {
+    if (!col.importable) continue
+    const raw = record[col.label]
+    if (raw === undefined) continue
+    if (col.key === 'taluks' || col.key === 'tags') {
+      out[col.key] = raw ? raw.split(';').map((s) => s.trim()).filter(Boolean) : []
+    } else {
+      out[col.key] = raw
+    }
+  }
+  return out
+}
+
+async function validateImportRow(
+  record: Record<string, string>,
+  rowIndex: number
+): Promise<{ result: ImportRowResult; input: CreateEnquiryInput | null }> {
+  const raw = mapImportRecord(record)
+  const base: Pick<ImportRowResult, 'customerName' | 'phone'> = {
+    customerName: String(raw.customerName ?? '').trim() || `Row ${rowIndex}`,
+    phone:        String(raw.phone ?? '').trim(),
+  }
+
+  const parsed = CreateEnquirySchema.safeParse(raw)
+  if (!parsed.success) {
+    const errors = Object.entries(parsed.error.flatten().fieldErrors)
+      .flatMap(([field, msgs]) => (msgs ?? []).map((m) => `${field}: ${m}`))
+    return { result: { rowIndex, ok: false, errors, ...base }, input: null }
+  }
+
+  const master = await validateMasterFields(parsed.data)
+  if (!master.ok) {
+    const errors = Object.entries(master.fieldErrors).flatMap(([field, msgs]) => msgs.map((m) => `${field}: ${m}`))
+    return { result: { rowIndex, ok: false, errors, ...base }, input: null }
+  }
+
+  return { result: { rowIndex, ok: true, errors: [], ...base }, input: parsed.data }
+}
+
+export async function previewEnquiryImportAction(
+  records: Record<string, string>[]
+): Promise<ActionResult<ImportRowResult[]>> {
+  try {
+    await requirePermission('enquiry:create')
+
+    if (records.length === 0) return { ok: false, error: 'The file has no data rows' }
+    if (records.length > IMPORT_ROW_CAP) {
+      return { ok: false, error: `${records.length} rows found — split files above ${IMPORT_ROW_CAP} rows into smaller batches.` }
+    }
+
+    await dbConnect()
+
+    const results: ImportRowResult[] = []
+    for (let i = 0; i < records.length; i++) {
+      const { result } = await validateImportRow(records[i], i + 1)
+      results.push(result)
+    }
+
+    return { ok: true, data: results }
+  } catch (err) {
+    return authErrorToResult(err)
+  }
+}
+
+export async function importEnquiriesAction(
+  records: Record<string, string>[]
+): Promise<ActionResult<ImportRowResult[]>> {
+  try {
+    const session = await requirePermission('enquiry:create')
+
+    if (records.length === 0) return { ok: false, error: 'Nothing to import' }
+    if (records.length > IMPORT_ROW_CAP) {
+      return { ok: false, error: `${records.length} rows found — split files above ${IMPORT_ROW_CAP} rows into smaller batches.` }
+    }
+
+    await dbConnect()
+
+    // Processed one at a time (not in parallel) so enquiry-number generation,
+    // staff load-balancing, and distributor/dealer resolution all stay
+    // correct and consistent with a single manual create.
+    const results: ImportRowResult[] = []
+    let createdCount = 0
+    for (let i = 0; i < records.length; i++) {
+      const { result, input } = await validateImportRow(records[i], i + 1)
+      if (!input) { results.push(result); continue }
+
+      const created = await createValidatedEnquiry(input, session, { awaitAutoAssign: true })
+      if (!created.ok) {
+        results.push({ ...result, ok: false, errors: [created.error] })
+        continue
+      }
+      createdCount++
+      results.push({ ...result, enquiryNo: created.data.enquiryNo })
+    }
+
+    if (createdCount > 0) {
+      revalidateTag(CACHE_TAGS.enquiries)
+      revalidateTag(CACHE_TAGS.dashboard)
+    }
+
+    return { ok: true, data: results }
   } catch (err) {
     return authErrorToResult(err)
   }
