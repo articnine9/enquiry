@@ -2,6 +2,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { MessageSquareWarning, Plus } from 'lucide-react'
 import { requirePermission } from '@/lib/auth/session'
+import { enforceStaffModuleAccess } from '@/features/settings/services/moduleVisibility.service'
 import { PageHeader } from '@/components/ui/PageHeader'
 import type { Metadata } from 'next'
 
@@ -12,7 +13,8 @@ const ComplaintList = dynamic(
 )
 
 export default async function ComplaintsPage() {
-  await requirePermission('complaint:read')
+  const session = await requirePermission('complaint:read')
+  await enforceStaffModuleAccess(session.user.role, 'complaints')
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 mx-auto space-y-6">

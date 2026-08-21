@@ -1,5 +1,6 @@
 import dynamic from 'next/dynamic'
 import { requirePermission } from '@/lib/auth/session'
+import { enforceStaffModuleAccess } from '@/features/settings/services/moduleVisibility.service'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Inventory & Stock Management' }
@@ -18,7 +19,8 @@ const InventoryDashboard = dynamic(
 )
 
 export default async function InventoryPage() {
-  await requirePermission('inventory:read')
+  const session = await requirePermission('inventory:read')
+  await enforceStaffModuleAccess(session.user.role, 'inventory')
 
   // InventoryDashboard owns its own page layout, header, and toolbar.
   return <InventoryDashboard />

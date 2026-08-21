@@ -12,11 +12,12 @@ import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
 
 interface NavItem {
-  href:   string
-  label:  string
-  icon:   React.ElementType
-  roles:  UserRole[]
-  badge?: number
+  href:       string
+  label:      string
+  icon:       React.ElementType
+  roles:      UserRole[]
+  moduleKey?: string   // matches a TOGGLEABLE_MODULES key — hideable per-Staff
+  badge?:     number
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Follow-ups',
     icon:  CalendarClock,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+    moduleKey: 'follow_ups',
   },
   {
     href:  '/staff',
@@ -55,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Inventory',
     icon:  Boxes,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+    moduleKey: 'inventory',
   },
   {
     href:  '/distributors',
@@ -73,12 +76,14 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Field Visits',
     icon:  Footprints,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+    moduleKey: 'field_visits',
   },
   {
     href:  '/complaints',
     label: 'Complaints',
     icon:  MessageSquareWarning,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+    moduleKey: 'complaints',
   },
   {
     href:  '/reports',
@@ -107,14 +112,17 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 interface SidebarProps {
-  open:    boolean
-  role:    UserRole
-  onClose: () => void
+  open:           boolean
+  role:           UserRole
+  hiddenModules?: string[]
+  onClose:        () => void
 }
 
-export default function Sidebar({ open, role, onClose }: SidebarProps) {
+export default function Sidebar({ open, role, hiddenModules = [], onClose }: SidebarProps) {
   const pathname = usePathname()
-  const items    = NAV_ITEMS.filter((i) => i.roles.includes(role))
+  const items    = NAV_ITEMS.filter((i) =>
+    i.roles.includes(role) && !(i.moduleKey && hiddenModules.includes(i.moduleKey))
+  )
 
   return (
     <aside className={cn(

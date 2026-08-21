@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { User, Lock, Database, Timer, ChevronRight, ShieldCheck, Trash2 } from 'lucide-react'
+import { User, Lock, Database, Timer, ChevronRight, ShieldCheck, Trash2, LayoutPanelLeft } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { getInitials } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
@@ -65,6 +65,16 @@ const CARDS: SettingCard[] = [
     iconColor: 'text-red-600 dark:text-red-400',
     title:     'SLA Policies',
     desc:      'Set resolution-time targets per priority and category',
+    group:     'admin',
+    roles:     [UserRole.SuperAdmin],
+  },
+  {
+    href:      '/settings/module-access',
+    icon:      LayoutPanelLeft,
+    iconBg:    'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
+    title:     'Module Access',
+    desc:      'Show or hide Follow-ups, Inventory, Field Visits, and Complaints for Staff',
     group:     'admin',
     roles:     [UserRole.SuperAdmin],
   },

@@ -15,10 +15,11 @@ interface AppShellProps {
     role:  UserRole
     image?: string | null
   }
+  hiddenModules?: string[]
   children: React.ReactNode
 }
 
-export default function AppShell({ user, children }: AppShellProps) {
+export default function AppShell({ user, hiddenModules = [], children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const isMobile = useIsMobile()
 
@@ -29,6 +30,7 @@ export default function AppShell({ user, children }: AppShellProps) {
         <Sidebar
           open={sidebarOpen}
           role={user.role}
+          hiddenModules={hiddenModules}
           onClose={() => setSidebarOpen(false)}
         />
       )}
@@ -45,7 +47,7 @@ export default function AppShell({ user, children }: AppShellProps) {
       </div>
 
       {/* Mobile bottom nav */}
-      {isMobile && <MobileNav role={user.role} />}
+      {isMobile && <MobileNav role={user.role} hiddenModules={hiddenModules} />}
     </div>
   )
 }

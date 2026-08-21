@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
 import AppShell from '@/components/layout/AppShell'
+import { getStaffModuleVisibility } from '@/features/settings/services/moduleVisibility.service'
+import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -23,6 +25,11 @@ export default async function DashboardLayout({
   // Guard: should never reach here due to middleware, but belt-and-braces
   if (!session?.user) redirect('/login')
 
+  // Only Staff visibility is configurable — skip the query for other roles.
+  const hiddenModules = session.user.role === UserRole.Staff
+    ? Object.entries(await getStaffModuleVisibility()).filter(([, enabled]) => !enabled).map(([key]) => key)
+    : []
+
   return (
     <AppShell
       user={{
@@ -32,6 +39,7 @@ export default async function DashboardLayout({
         role:  session.user.role,
         image: session.user.image ?? undefined,
       }}
+      hiddenModules={hiddenModules}
     >
       {children}
     </AppShell>

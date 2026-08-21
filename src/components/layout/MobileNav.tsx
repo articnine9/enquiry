@@ -10,10 +10,11 @@ import { cn } from '@/lib/utils'
 import { UserRole } from '@/types/enums'
 
 interface NavItem {
-  href:  string
-  label: string
-  icon:  React.ElementType
-  roles: UserRole[]
+  href:       string
+  label:      string
+  icon:       React.ElementType
+  roles:      UserRole[]
+  moduleKey?: string
 }
 
 const MOBILE_ITEMS: NavItem[] = [
@@ -34,6 +35,7 @@ const MOBILE_ITEMS: NavItem[] = [
     label: 'Follow-ups',
     icon:  CalendarClock,
     roles: [UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff],
+    moduleKey: 'follow_ups',
   },
   {
     href:  '/staff',
@@ -56,12 +58,15 @@ const MOBILE_ITEMS: NavItem[] = [
 ]
 
 interface MobileNavProps {
-  role: UserRole
+  role:           UserRole
+  hiddenModules?: string[]
 }
 
-export default function MobileNav({ role }: MobileNavProps) {
+export default function MobileNav({ role, hiddenModules = [] }: MobileNavProps) {
   const pathname = usePathname()
-  const items    = MOBILE_ITEMS.filter((i) => i.roles.includes(role))
+  const items    = MOBILE_ITEMS.filter((i) =>
+    i.roles.includes(role) && !(i.moduleKey && hiddenModules.includes(i.moduleKey))
+  )
 
   return (
     <nav className={cn(

@@ -2,6 +2,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Footprints, Plus } from 'lucide-react'
 import { requirePermission } from '@/lib/auth/session'
+import { enforceStaffModuleAccess } from '@/features/settings/services/moduleVisibility.service'
 import { PageHeader } from '@/components/ui/PageHeader'
 import type { Metadata } from 'next'
 
@@ -16,7 +17,8 @@ interface PageProps {
 }
 
 export default async function FieldVisitsPage({ searchParams }: PageProps) {
-  await requirePermission('visit:read')
+  const session = await requirePermission('visit:read')
+  await enforceStaffModuleAccess(session.user.role, 'field_visits')
   const { distributorId } = await searchParams
 
   return (

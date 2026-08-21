@@ -1,6 +1,7 @@
 ﻿import dynamic from 'next/dynamic'
 import { CalendarClock } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
+import { enforceStaffModuleAccess } from '@/features/settings/services/moduleVisibility.service'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Follow-ups' }
@@ -11,6 +12,7 @@ const FollowUpsClient = dynamic(
 
 export default async function FollowUpsPage() {
   const session = await requireSession()
+  await enforceStaffModuleAccess(session.user.role, 'follow_ups')
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
