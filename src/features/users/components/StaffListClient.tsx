@@ -8,7 +8,7 @@ import {
   getUsersAction, deleteUserAction, getZonesForSelectAction,
   type UserFilters as Filters, type UserRow,
 } from '../actions/user.actions'
-import { UserRole } from '@/types/enums'
+import { UserRole, UserStatus } from '@/types/enums'
 import type { PaginatedResult } from '@/types/api'
 
 const EMPTY: PaginatedResult<UserRow> = {
@@ -22,7 +22,10 @@ interface StaffListClientProps {
 
 export default function StaffListClient({ currentUserId, currentRole }: StaffListClientProps) {
   const router = useRouter()
-  const [filters,   setFilters]   = useState<Filters>({ page: 1, pageSize: 20 })
+  // Defaults to Active only — a deactivated staff member should actually
+  // disappear from view, not just get a status badge change nobody notices.
+  const DEFAULT_FILTERS: Filters = { page: 1, pageSize: 20, status: UserStatus.Active }
+  const [filters,   setFilters]   = useState<Filters>(DEFAULT_FILTERS)
   const [result,    setResult]    = useState<PaginatedResult<UserRow>>(EMPTY)
   const [isLoading, setIsLoading] = useState(false)
   const [zones,     setZones]     = useState<{ _id: string; name: string }[]>([])
@@ -30,7 +33,7 @@ export default function StaffListClient({ currentUserId, currentRole }: StaffLis
 
   useEffect(() => {
     getZonesForSelectAction().then((r) => { if (r.ok) setZones(r.data) })
-    load({ page: 1, pageSize: 20 })
+    load(DEFAULT_FILTERS)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async (f: Filters) => {

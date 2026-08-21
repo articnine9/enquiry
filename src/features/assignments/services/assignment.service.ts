@@ -19,7 +19,7 @@ import {
   AssignmentStatus,
   ZoneMatchTier,
 } from '@/types/assignment.types'
-import { ActivityAction, EntityType, type UserRole } from '@/types/enums'
+import { ActivityAction, EntityType, UserRole, UserStatus } from '@/types/enums'
 import type {
   AutoAssignParams,
   ManualAssignParams,
@@ -271,6 +271,14 @@ export async function manualAssign(
     const staffId   = toId(params.staffId)
     const actorId   = toId(params.actorId)
 
+    // Re-validate server-side — the picker only ever lists active staff, but
+    // don't trust a client value that could be stale (deactivated between
+    // the modal loading and the form submitting) or tampered with.
+    const targetStaff = await User.findById(staffId).select('role status').lean()
+    if (!targetStaff || targetStaff.role !== UserRole.Staff || targetStaff.status !== UserStatus.Active) {
+      return { ok: false, error: 'This staff member is no longer available for assignment' }
+    }
+
     // Check if staff is already active on this enquiry
     const existing = await Assignment.findOne({
       enquiryId,
@@ -327,8 +335,12 @@ export async function reassign(
       return { ok: false, error: 'Enquiry is already assigned to this staff member' }
     }
 
-    // Resolve zone for new staff member
-    const newStaff = await User.findById(staffId).select('locationZoneId').lean()
+    // Re-validate server-side, same as manualAssign above — don't trust a
+    // client-submitted staffId that could be stale or tampered with.
+    const newStaff = await User.findById(staffId).select('role status locationZoneId').lean()
+    if (!newStaff || newStaff.role !== UserRole.Staff || newStaff.status !== UserStatus.Active) {
+      return { ok: false, error: 'This staff member is no longer available for assignment' }
+    }
 
     const assignment = await _createAssignmentRecord({
       enquiryId,
