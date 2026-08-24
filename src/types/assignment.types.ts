@@ -18,7 +18,8 @@ export enum AssignmentStatus {
 export enum ZoneMatchTier {
   Pincode  = 'pincode',  // exact 5-digit match
   District = 'district', // district-level fallback
-  City     = 'city',     // city-level fallback
+  City     = 'city',     // city-level fallback (LocationZone.cities match)
+  Taluk    = 'taluk',    // staff district+taluk coverage match
   Global   = 'global',   // no zone found — any available staff
 }
 
@@ -67,8 +68,8 @@ export interface IAssignment {
 export interface AutoAssignParams {
   enquiryId:   string
   pincode:     string
-  city?:       string
   district?:   string
+  taluks?:     string[]
   actorId:     string // system/manager id triggering auto-assign
   actorRole:   UserRole
 }

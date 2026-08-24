@@ -133,13 +133,21 @@ export default function UserTable({
                     </span>
                   </td>
 
-                  {/* Coverage (district / city) */}
+                  {/* Coverage (districts / taluks) */}
                   <td className="px-4 py-3">
                     <span className="text-xs text-slate-600 dark:text-slate-400">
-                      {u.district
-                        ? `${u.district}${u.city ? ` / ${u.city}` : ''}`
-                        : <span className="text-slate-300 dark:text-slate-600">—</span>
-                      }
+                      {u.assignedDistricts.length > 0 ? (
+                        <>
+                          {u.assignedDistricts.length} district{u.assignedDistricts.length === 1 ? '' : 's'}
+                          {u.assignedTaluks.length > 0 && (
+                            <span className="ml-1 text-purple-500 dark:text-purple-400">
+                              · {u.assignedTaluks.length} taluk{u.assignedTaluks.length === 1 ? '' : 's'} scoped
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-600">—</span>
+                      )}
                     </span>
                   </td>
 

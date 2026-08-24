@@ -13,7 +13,7 @@ export interface ConvertibleEnquiry {
   // taluks coverage list); the first entry is carried into Customer.city as
   // the closest available granularity, best-effort.
   taluks?:        string[]
-  district:       string
+  district?:      string
   product:        string
   category:       string
   distributorId?: Types.ObjectId | string | null

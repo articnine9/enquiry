@@ -23,7 +23,9 @@ export interface IEnquiry {
   // so legacy docs without it still save; required for new/edited ones via Zod
   // at the action layer, same pattern as businessCategory below.
   state?:        string
-  district:      string
+  // Required via CreateEnquirySchema (Zod) for the normal form/CSV import —
+  // optional here so lightweight bulk loads without district data aren't blocked.
+  district?:     string
   // Replaces the old singular `city`/`taluk` field — a coverage area rather
   // than one address point, so an enquiry can span multiple sub-district
   // units within its district. Optional/empty-array-able because taluk
@@ -200,9 +202,14 @@ const EnquirySchema = new Schema<EnquiryDocument>(
       trim:      true,
       maxlength: [100, 'State cannot exceed 100 characters'],
     },
+    // Required for enquiries created through the normal form/CSV import (that
+    // requirement is enforced by CreateEnquirySchema, at the Zod layer) — left
+    // optional here at the DB level so lightweight bulk loads (e.g. an expo
+    // lead list with only name/location/phone) aren't blocked. Auto-assignment
+    // and distributor/channel resolution already no-op gracefully when district
+    // is empty, so nothing downstream breaks.
     district: {
       type:      String,
-      required:  [true, 'District is required'],
       trim:      true,
       maxlength: [100, 'District cannot exceed 100 characters'],
     },

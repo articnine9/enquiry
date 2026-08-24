@@ -48,8 +48,8 @@ export interface IUser {
   role:          UserRole
   status:        UserStatus
   locationZoneId?: Types.ObjectId
-  district?:     string
-  city?:         string
+  assignedDistricts: string[]
+  assignedTaluks:    string[]
   avatar?:       string
   phone?:        string
   maxLoad:       number

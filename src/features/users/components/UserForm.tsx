@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserRole, UserStatus } from '@/types/enums'
-import { Combobox } from '@/components/forms/Combobox'
-import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
+import { DistrictMultiPicker, TalukMultiPicker } from '@/components/forms/LocationMultiPicker'
 import {
   createUserAction, updateUserAction, getZonesForSelectAction,
   type UserRow,
@@ -43,12 +42,9 @@ export default function UserForm({ mode, user, currentRole }: UserFormProps) {
     status:         user?.status         ?? UserStatus.Active,
     phone:          user?.phone          ?? '',
     locationZoneId: user?.locationZoneId ?? '',
-    district:       user?.district       ?? '',
-    city:           user?.city           ?? '',
+    assignedDistricts: user?.assignedDistricts ?? [] as string[],
+    assignedTaluks:    user?.assignedTaluks    ?? [] as string[],
   })
-
-  const districtOptions = useMemo(() => getDistrictOptions(), [])
-  const cityOptions     = useMemo(() => getCityOptions(form.district), [form.district])
 
   useEffect(() => {
     getZonesForSelectAction().then((r) => { if (r.ok) setZones(r.data) })
@@ -56,13 +52,6 @@ export default function UserForm({ mode, user, currentRole }: UserFormProps) {
 
   function set(field: string, value: string) {
     setForm((p) => ({ ...p, [field]: value }))
-  }
-
-  function setDistrict(next: string) {
-    setForm((p) => {
-      const stillValid = getCityOptions(next).some((c) => c.value === p.city)
-      return { ...p, district: next, city: stillValid ? p.city : '' }
-    })
   }
 
   const isStaff = form.role === UserRole.Staff
@@ -81,8 +70,8 @@ export default function UserForm({ mode, user, currentRole }: UserFormProps) {
           status:         form.status,
           phone:          form.phone || undefined,
           locationZoneId: form.locationZoneId || undefined,
-          district:       form.role === UserRole.Staff ? (form.district || undefined) : undefined,
-          city:           form.role === UserRole.Staff ? (form.city || undefined) : undefined,
+          assignedDistricts: form.role === UserRole.Staff ? form.assignedDistricts : [],
+          assignedTaluks:    form.role === UserRole.Staff ? form.assignedTaluks    : [],
         }
         const r = await createUserAction(input)
         if (!r.ok) { setError(r.error); return }
@@ -96,8 +85,8 @@ export default function UserForm({ mode, user, currentRole }: UserFormProps) {
           status:         form.status,
           phone:          form.phone || undefined,
           locationZoneId: form.locationZoneId || null,
-          district:       form.role === UserRole.Staff ? (form.district || null) : null,
-          city:           form.role === UserRole.Staff ? (form.city || null) : null,
+          assignedDistricts: form.role === UserRole.Staff ? form.assignedDistricts : [],
+          assignedTaluks:    form.role === UserRole.Staff ? form.assignedTaluks    : [],
         }
         const r = await updateUserAction(user!._id, input)
         if (!r.ok) { setError(r.error); return }
@@ -199,36 +188,25 @@ export default function UserForm({ mode, user, currentRole }: UserFormProps) {
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 p-3 space-y-3">
           <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
             Coverage area
-            <span className="ml-1 font-normal text-slate-400">— new enquiries in this district/city auto-assign here</span>
+            <span className="ml-1 font-normal text-slate-400">— new enquiries in these districts/taluks auto-assign here</span>
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={LABEL}>District</label>
-              <Combobox
-                id="staff-district" name="district"
-                options={districtOptions}
-                value={form.district}
-                onChange={setDistrict}
-                placeholder="Select district"
-                searchPlaceholder="Search district…"
-                emptyText="No district found"
-                disabled={isPending}
-              />
-            </div>
-            <div>
-              <label className={LABEL}>City <span className="font-normal text-slate-400">(optional)</span></label>
-              <Combobox
-                id="staff-city" name="city"
-                options={cityOptions}
-                value={form.city}
-                onChange={(v) => set('city', v)}
-                placeholder="Any city in district"
-                searchPlaceholder="Search city…"
-                emptyText="No city found"
-                disabled={isPending || !form.district}
-                disabledHint={!form.district ? 'Select a district first' : undefined}
-              />
-            </div>
+          <div>
+            <label className={LABEL}>Assigned districts</label>
+            <DistrictMultiPicker
+              selected={form.assignedDistricts}
+              onChange={(v) => setForm((p) => ({ ...p, assignedDistricts: v }))}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Assigned taluks <span className="font-normal text-slate-400">(optional)</span></label>
+            <TalukMultiPicker
+              districts={form.assignedDistricts}
+              selected={form.assignedTaluks}
+              onChange={(v) => setForm((p) => ({ ...p, assignedTaluks: v }))}
+            />
+            <p className="mt-1 text-[11px] text-slate-400">
+              Only needed to narrow this staff member to specific taluks within an assigned district.
+            </p>
           </div>
         </div>
       )}

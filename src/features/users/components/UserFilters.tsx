@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, RotateCcw } from 'lucide-react'
 import { UserRole, UserStatus } from '@/types/enums'
 import { Combobox } from '@/components/forms/Combobox'
-import { getDistrictOptions, getCityOptions } from '@/lib/data/southIndiaDistricts'
+import { getDistrictOptions } from '@/lib/data/southIndiaDistricts'
+import { getMasterDataAction } from '@/features/settings/actions/masterData.actions'
 import { cn } from '@/lib/utils'
 import type { UserFilters } from '../actions/user.actions'
 
@@ -46,20 +47,31 @@ export default function UserFilters({
   }
 
   const districtOptions = useMemo(() => getDistrictOptions(), [])
-  const cityOptions = useMemo(
-    () => (filters.district ? getCityOptions(filters.district) : []),
-    [filters.district]
-  )
+  const [talukOptions, setTalukOptions] = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    if (!filters.district) { setTalukOptions([]); return }
+    const district = filters.district
+    Promise.all([getMasterDataAction('district'), getMasterDataAction('taluk')]).then(([distRes, talukRes]) => {
+      if (!distRes.ok || !talukRes.ok) return
+      const districtCodes = new Set(
+        distRes.data.filter((d) => d.label.toLowerCase() === district.toLowerCase()).map((d) => d.code)
+      )
+      setTalukOptions(
+        talukRes.data
+          .filter((t) => t.isActive && t.parentCode && districtCodes.has(t.parentCode))
+          .map((t) => ({ value: t.label, label: t.label }))
+      )
+    })
+  }, [filters.district])
 
   function handleDistrictChange(district: string) {
-    // Clear city if it no longer belongs to the newly selected district
-    const stillValid = district && getCityOptions(district).some((c) => c.value === filters.city)
-    set({ district: district || undefined, city: stillValid ? filters.city : undefined })
+    set({ district: district || undefined, taluk: undefined })
   }
 
   const hasActive = !!(
     filters.search || filters.role || filters.status ||
-    filters.locationZoneId || filters.district || filters.city
+    filters.locationZoneId || filters.district || filters.taluk
   )
 
   return (
@@ -97,7 +109,7 @@ export default function UserFilters({
         </select>
       )}
 
-      {/* Coverage: district / city */}
+      {/* Coverage: district / taluk */}
       <div className="w-44">
         <Combobox
           id="staff-filter-district"
@@ -112,14 +124,14 @@ export default function UserFilters({
       </div>
       <div className="w-40">
         <Combobox
-          id="staff-filter-city"
-          name="city"
-          options={cityOptions}
-          value={filters.city ?? ''}
-          onChange={(city) => set({ city: city || undefined })}
-          placeholder="All cities"
-          searchPlaceholder="Search city…"
-          emptyText="No city found"
+          id="staff-filter-taluk"
+          name="taluk"
+          options={talukOptions}
+          value={filters.taluk ?? ''}
+          onChange={(taluk) => set({ taluk: taluk || undefined })}
+          placeholder="All taluks"
+          searchPlaceholder="Search taluk…"
+          emptyText="No taluk found"
           disabled={!filters.district}
           disabledHint="Select a district first"
         />

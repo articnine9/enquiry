@@ -50,16 +50,16 @@ const UserSchema = new Schema<UserDocument>(
       type: Schema.Types.ObjectId,
       ref:  'LocationZone',
     },
-    // Direct geo coverage — enquiries in this district/city auto-assign here.
-    district: {
-      type:      String,
-      trim:      true,
-      maxlength: [100, 'District cannot exceed 100 characters'],
+    // Direct geo coverage — enquiries in these districts/taluks auto-assign
+    // here. Mirrors Distributor.assignedDistricts/assignedTaluks, since the
+    // same people often act as both Staff and Distributor.
+    assignedDistricts: {
+      type:    [String],
+      default: [],
     },
-    city: {
-      type:      String,
-      trim:      true,
-      maxlength: [100, 'City cannot exceed 100 characters'],
+    assignedTaluks: {
+      type:    [String],
+      default: [],
     },
     avatar: {
       type:  String,
@@ -108,8 +108,8 @@ UserSchema.index({ role: 1 })
 UserSchema.index({ status: 1 })
 UserSchema.index({ locationZoneId: 1, role: 1 })
 UserSchema.index({ locationZoneId: 1, isAvailable: 1, role: 1 }) // auto-assign query
-UserSchema.index({ role: 1, district: 1, isAvailable: 1 })       // district auto-assign
-UserSchema.index({ role: 1, city: 1, isAvailable: 1 })           // city auto-assign
+UserSchema.index({ role: 1, assignedDistricts: 1, isAvailable: 1 }) // district auto-assign
+UserSchema.index({ role: 1, assignedTaluks: 1, isAvailable: 1 })    // taluk auto-assign
 UserSchema.index({ currentLoad: 1, isAvailable: 1 })             // workload sort
 UserSchema.index({ createdAt: -1 })
 

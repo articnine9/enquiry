@@ -208,10 +208,10 @@ export async function autoAssign(
     const enquiryId = toId(params.enquiryId)
     const actorId   = toId(params.actorId)
 
-    // 1 — Direct match on a staff member's district/city coverage (primary).
+    // 1 — Direct match on a staff member's district/taluk coverage (primary).
     const areaStaff = await resolveStaffByArea({
       district: params.district,
-      city:     params.city,
+      taluks:   params.taluks,
     })
     if (areaStaff) {
       const assignment = await _createAssignmentRecord({
@@ -231,7 +231,6 @@ export async function autoAssign(
     const zoneResolution = await resolveZone({
       pincode:  params.pincode,
       district: params.district,
-      city:     params.city,
     })
 
     const staffResolution = await resolveStaff({

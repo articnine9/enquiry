@@ -9,8 +9,8 @@ export const CreateUserSchema = z.object({
   status:         z.nativeEnum(UserStatus).default(UserStatus.Active),
   phone:          z.string().max(20).optional(),
   locationZoneId: z.string().optional(),
-  district:       z.string().max(100).trim().optional(),
-  city:           z.string().max(100).trim().optional(),
+  assignedDistricts: z.array(z.string().trim().min(1)).default([]),
+  assignedTaluks:    z.array(z.string().trim().min(1)).default([]),
 })
 
 export const UpdateUserSchema = z.object({
@@ -20,8 +20,8 @@ export const UpdateUserSchema = z.object({
   status:         z.nativeEnum(UserStatus).optional(),
   phone:          z.string().max(20).optional(),
   locationZoneId: z.string().optional().nullable(),
-  district:       z.string().max(100).trim().optional().nullable(),
-  city:           z.string().max(100).trim().optional().nullable(),
+  assignedDistricts: z.array(z.string().trim().min(1)).optional(),
+  assignedTaluks:    z.array(z.string().trim().min(1)).optional(),
 })
 
 // Self-service — deliberately excludes role/status/locationZoneId, which are

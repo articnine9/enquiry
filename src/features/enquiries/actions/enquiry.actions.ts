@@ -147,12 +147,13 @@ async function createValidatedEnquiry(
     createdBy:      session.user.id,
   })
 
-  // Attempt auto-assignment. No city-tier match anymore (see resolveChannelByArea
-  // call above for why) — falls back to district/pincode-level staff coverage.
+  // Attempt auto-assignment. District+taluk coverage first, falling back to
+  // district/pincode-level zone resolution.
   const assignParams = {
     enquiryId: String(enquiry._id),
     pincode:   input.pincode ?? '',
     district:  input.district,
+    taluks:    input.taluks,
     actorId:   session.user.id,
     actorRole: session.user.role,
   }
@@ -751,7 +752,7 @@ export async function exportEnquiriesAction(
       email:         e.email ?? '',
       address:       e.address,
       state:         e.state ?? '',
-      district:      e.district,
+      district:      e.district ?? '',
       taluks:        (e.taluks ?? []).join('; '),
       pincode:       e.pincode ?? '',
       location:      e.location,
@@ -974,12 +975,12 @@ export async function getStaffForAssignmentAction(
     const district = enquiry.district?.trim().toLowerCase()
 
     const staff = await User.find({ role: UserRole.Staff, status: UserStatus.Active })
-      .select('name email district city currentLoad maxLoad')
+      .select('name email assignedDistricts assignedTaluks currentLoad maxLoad')
       .lean()
 
     const options: StaffAssignOption[] = staff.map((s) => {
       const loadPercent = s.maxLoad > 0 ? Math.round((s.currentLoad / s.maxLoad) * 100) : 0
-      const zoneMatch = !!district && s.district?.trim().toLowerCase() === district
+      const zoneMatch = !!district && (s.assignedDistricts ?? []).some((d) => d.trim().toLowerCase() === district)
       return {
         id:           String(s._id),
         name:         s.name,

@@ -27,8 +27,8 @@ export interface UserRow {
   phone?:         string
   locationZoneId: string | null
   zoneName?:      string
-  district?:      string
-  city?:          string
+  assignedDistricts: string[]
+  assignedTaluks:    string[]
   lastLoginAt?:   string
   createdAt:      string
 }
@@ -39,7 +39,7 @@ export interface UserFilters {
   status?:        UserStatus
   locationZoneId?: string
   district?:      string
-  city?:          string
+  taluk?:         string
   page?:          number
   pageSize?:      number
 }
@@ -66,8 +66,8 @@ export async function getUsersAction(
     if (filters.role)           query['role']           = filters.role
     if (filters.status)         query['status']         = filters.status
     if (filters.locationZoneId) query['locationZoneId'] = filters.locationZoneId
-    if (filters.district)       query['district']       = new RegExp(`^${filters.district.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
-    if (filters.city)           query['city']           = new RegExp(`^${filters.city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    if (filters.district)       query['assignedDistricts'] = new RegExp(`^${filters.district.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    if (filters.taluk)          query['assignedTaluks']    = new RegExp(`^${filters.taluk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
 
     const [docs, total] = await Promise.all([
       User.find(query)
@@ -88,8 +88,8 @@ export async function getUsersAction(
       phone:          u.phone,
       locationZoneId: u.locationZoneId ? String((u.locationZoneId as unknown as { _id: unknown })._id) : null,
       zoneName:       (u.locationZoneId as unknown as { name?: string } | null)?.name,
-      district:       u.district,
-      city:           u.city,
+      assignedDistricts: u.assignedDistricts ?? [],
+      assignedTaluks:    u.assignedTaluks    ?? [],
       lastLoginAt:    u.lastLoginAt ? String(u.lastLoginAt) : undefined,
       createdAt:      String(u.createdAt),
     }))
@@ -132,8 +132,8 @@ export async function getUserAction(id: string): Promise<ActionResult<UserRow>> 
         phone:          u.phone,
         locationZoneId: u.locationZoneId ? String((u.locationZoneId as unknown as { _id: unknown })._id) : null,
         zoneName:       (u.locationZoneId as unknown as { name?: string } | null)?.name,
-        district:       u.district,
-        city:           u.city,
+        assignedDistricts: u.assignedDistricts ?? [],
+        assignedTaluks:    u.assignedTaluks    ?? [],
         lastLoginAt:    u.lastLoginAt ? String(u.lastLoginAt) : undefined,
         createdAt:      String(u.createdAt),
       }),
@@ -170,8 +170,8 @@ export async function createUserAction(
       status:         parsed.data.status,
       phone:          parsed.data.phone,
       locationZoneId: parsed.data.locationZoneId || undefined,
-      district:       parsed.data.district || undefined,
-      city:           parsed.data.city || undefined,
+      assignedDistricts: parsed.data.assignedDistricts,
+      assignedTaluks:    parsed.data.assignedTaluks,
     })
 
     revalidateTag('users')
@@ -217,8 +217,8 @@ export async function updateUserAction(
     if (parsed.data.status         != null) update['status']         = parsed.data.status
     if (parsed.data.phone          != null) update['phone']          = parsed.data.phone
     if ('locationZoneId' in parsed.data)    update['locationZoneId'] = parsed.data.locationZoneId || null
-    if ('district' in parsed.data)          update['district']       = parsed.data.district || null
-    if ('city' in parsed.data)              update['city']           = parsed.data.city || null
+    if (parsed.data.assignedDistricts != null) update['assignedDistricts'] = parsed.data.assignedDistricts
+    if (parsed.data.assignedTaluks    != null) update['assignedTaluks']    = parsed.data.assignedTaluks
 
     await User.findByIdAndUpdate(id, { $set: update })
 

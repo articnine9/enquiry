@@ -57,20 +57,21 @@ export async function resolveZone(params: {
 
 /**
  * Match an enquiry directly to a staff member by their coverage area.
- * Priority: district+city → district → city. Within a tier, the least-loaded
- * active & available staff member wins. Returns null when nobody covers the area.
+ * Priority: district+taluk overlap → district alone. Within a tier, the
+ * least-loaded active & available staff member wins. Returns null when
+ * nobody covers the area.
  */
 export async function resolveStaffByArea(params: {
   district?:   string
-  city?:       string
+  taluks?:     string[]
   excludeIds?: Types.ObjectId[]
 }): Promise<{ staffId: Types.ObjectId; zoneId?: Types.ObjectId; tier: ZoneMatchTier } | null> {
   await dbConnect()
 
   const district = params.district?.trim()
-  const city     = params.city?.trim()
+  const taluks    = (params.taluks ?? []).map((t) => t.trim()).filter(Boolean)
   const excludeIds = params.excludeIds ?? []
-  if (!district && !city) return null
+  if (!district) return null
 
   const base = {
     role:        UserRole.Staff,
@@ -84,9 +85,13 @@ export async function resolveStaffByArea(params: {
   const rx = (v: string) => new RegExp(`^${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
 
   const attempts: { filter: Record<string, unknown>; tier: ZoneMatchTier }[] = []
-  if (district && city) attempts.push({ filter: { ...base, district: rx(district), city: rx(city) }, tier: ZoneMatchTier.City })
-  if (district)         attempts.push({ filter: { ...base, district: rx(district) },                  tier: ZoneMatchTier.District })
-  if (city)             attempts.push({ filter: { ...base, city: rx(city) },                          tier: ZoneMatchTier.City })
+  if (taluks.length) {
+    attempts.push({
+      filter: { ...base, assignedDistricts: rx(district), assignedTaluks: { $in: taluks.map(rx) } },
+      tier:   ZoneMatchTier.Taluk,
+    })
+  }
+  attempts.push({ filter: { ...base, assignedDistricts: rx(district) }, tier: ZoneMatchTier.District })
 
   for (const a of attempts) {
     const staff = await User.findOne(a.filter)

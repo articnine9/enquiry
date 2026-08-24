@@ -42,7 +42,7 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
   const canEdit = session.user.role === UserRole.SuperAdmin ||
     (session.user.role === UserRole.Manager && u.role === UserRole.Staff)
 
-  const coverage = [u.district, u.city].filter(Boolean).join(' / ')
+  const coverage = [...u.assignedDistricts, ...u.assignedTaluks.map((t) => `${t} (taluk)`)].join(', ')
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
