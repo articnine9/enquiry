@@ -114,13 +114,19 @@ export async function resolveStaffByArea(params: {
 
 /**
  * Find the least-loaded active staff member within a zone.
- * Falls back to any available staff globally if the zone has no capacity.
  *
- * Selection criteria (in priority order):
+ * Deliberately does NOT fall back to "any available staff" when there's no
+ * zone, or the zone has no staff — picking a random staff member from an
+ * unrelated region (e.g. auto-assigning a Kerala enquiry to a Tamil Nadu-only
+ * staff member) is worse than leaving the enquiry unassigned for a human to
+ * route. Mirrors resolveChannelByArea's "leave unassigned rather than guess"
+ * policy for distributor/dealer channel resolution.
+ *
+ * Selection criteria:
  *   1. Staff whose locationZoneId matches the zone
  *   2. Status = Active, currentLoad < maxLoad
  *   3. Sort by currentLoad ASC (round-robin by load)
- *   4. If no zone-matched staff, repeat for all zones (global fallback)
+ *   4. No zone, or no staff in the zone → null (unassigned)
  */
 export async function resolveStaff(params: {
   zone:         LocationZoneDocument | null
@@ -129,6 +135,7 @@ export async function resolveStaff(params: {
   await dbConnect()
 
   const { zone, excludeIds = [] } = params
+  if (!zone) return null
 
   const baseFilter = {
     status:      'active',
@@ -136,37 +143,20 @@ export async function resolveStaff(params: {
     ...(excludeIds.length && { _id: { $nin: excludeIds } }),
   }
 
-  // 1 — zone-scoped staff
-  if (zone) {
-    const staff = await User.findOne({
-      ...baseFilter,
-      locationZoneId: zone._id,
-    })
-      .sort({ currentLoad: 1 })
-      .select('_id currentLoad maxLoad locationZoneId')
-      .lean()
-
-    if (staff) {
-      return {
-        staffId: staff._id as Types.ObjectId,
-        zoneId:  zone._id,
-        tier:    ZoneMatchTier.Pincode, // overridden by caller with actual tier
-      }
-    }
-  }
-
-  // 2 — global fallback: any available staff
-  const globalStaff = await User.findOne(baseFilter)
+  const staff = await User.findOne({
+    ...baseFilter,
+    locationZoneId: zone._id,
+  })
     .sort({ currentLoad: 1 })
     .select('_id currentLoad maxLoad locationZoneId')
     .lean()
 
-  if (!globalStaff) return null
+  if (!staff) return null
 
   return {
-    staffId: globalStaff._id as Types.ObjectId,
-    zoneId:  globalStaff.locationZoneId as Types.ObjectId | undefined,
-    tier:    ZoneMatchTier.Global,
+    staffId: staff._id as Types.ObjectId,
+    zoneId:  zone._id,
+    tier:    ZoneMatchTier.Pincode, // overridden by caller with actual tier
   }
 }
 

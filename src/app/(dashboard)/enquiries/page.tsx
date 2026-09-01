@@ -8,6 +8,7 @@ import EnquiryTableContainer from '@/features/enquiries/components/EnquiryTableC
 import EnquiryStatsBar from '@/features/enquiries/components/EnquiryStatsBar'
 import ImportEnquiriesButton from '@/features/enquiries/components/ImportEnquiriesButton'
 import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
+import { canPerform } from '@/lib/permissions'
 import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
@@ -47,7 +48,7 @@ export default async function EnquiriesPage({ searchParams }: PageProps) {
   ])
 
   const filterOptions = await getEnquiryFormOptions()
-  const canCreate = session?.user?.role !== UserRole.Staff
+  const canCreate = !!session?.user?.role && canPerform(session.user.role as UserRole, 'enquiry:create')
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">

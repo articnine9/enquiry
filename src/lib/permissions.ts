@@ -47,6 +47,7 @@ const PERMISSIONS: Record<UserRole, Set<string>> = {
 
   [UserRole.Staff]: new Set([
     'enquiry:read',
+    'enquiry:create',
     'enquiry:update_status',
     'followup:read',
     'followup:create',

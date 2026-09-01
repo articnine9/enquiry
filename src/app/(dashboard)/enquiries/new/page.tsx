@@ -1,15 +1,14 @@
 ﻿import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
-import { requireRole } from '@/lib/auth/session'
+import { requirePermission } from '@/lib/auth/session'
 import EnquiryForm from '@/features/enquiries/components/EnquiryForm'
 import { getEnquiryFormOptions } from '@/features/settings/services/masterData.service'
-import { UserRole } from '@/types/enums'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'New Enquiry — EnquiryPro' }
 
 export default async function NewEnquiryPage() {
-  await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+  await requirePermission('enquiry:create')
 
   const options = await getEnquiryFormOptions()
 
