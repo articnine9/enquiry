@@ -23,5 +23,5 @@ export default async function InventoryPage() {
   await enforceStaffModuleAccess(session.user.role, 'inventory')
 
   // InventoryDashboard owns its own page layout, header, and toolbar.
-  return <InventoryDashboard />
+  return <InventoryDashboard currentUser={{ role: session.user.role, name: session.user.name }} />
 }

@@ -2,18 +2,19 @@
 
 import { useState } from 'react'
 import { X, ArrowUpRight, Plus, Trash2, AlertCircle } from 'lucide-react'
-import { StockTransactionType } from '@/types/enums'
+import { StockTransactionType, UserRole } from '@/types/enums'
 import { recordStockOutwardAction } from '../actions/stock.actions'
 import type { ProductRow } from '../actions/product.actions'
 import type { WarehouseRow } from '../actions/warehouse.actions'
 import { toast } from 'sonner'
 
 interface StockOutwardModalProps {
-  isOpen:     boolean
-  onClose:    () => void
-  onSuccess:  () => void
-  products:   ProductRow[]
-  warehouses: WarehouseRow[]
+  isOpen:      boolean
+  onClose:     () => void
+  onSuccess:   () => void
+  products:    ProductRow[]
+  warehouses:  WarehouseRow[]
+  currentUser: { role: UserRole; name: string }
 }
 
 interface OutwardItemRow {
@@ -29,9 +30,13 @@ export default function StockOutwardModal({
   onSuccess,
   products,
   warehouses,
+  currentUser,
 }: StockOutwardModalProps) {
+  const isStaff = currentUser.role === UserRole.Staff
   const [type, setType] = useState<StockTransactionType>(StockTransactionType.OutwardDispatch)
   const [sourceWarehouseId, setSourceWarehouseId] = useState(warehouses[0]?._id || '')
+  const [targetWarehouseId, setTargetWarehouseId] = useState('')
+  const [recipientName, setRecipientName] = useState('')
   const [referenceNo, setReferenceNo] = useState('')
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<OutwardItemRow[]>([
@@ -84,9 +89,20 @@ export default function StockOutwardModal({
     e.preventDefault()
     setError(null)
 
-    if (!sourceWarehouseId) {
-      setError('Please select a source warehouse')
-      return
+    if (isStaff) {
+      if (!recipientName.trim()) {
+        setError('Please enter who this dispatch is going to')
+        return
+      }
+    } else {
+      if (!sourceWarehouseId) {
+        setError('Please select a source warehouse')
+        return
+      }
+      if (!targetWarehouseId && !recipientName.trim()) {
+        setError('Select a destination warehouse or enter a recipient name')
+        return
+      }
     }
 
     if (items.length === 0 || items.some(i => !i.productId || i.quantity <= 0)) {
@@ -98,7 +114,9 @@ export default function StockOutwardModal({
     try {
       const res = await recordStockOutwardAction({
         type:              type as StockTransactionType.OutwardDispatch | StockTransactionType.OutwardSample,
-        sourceWarehouseId,
+        sourceWarehouseId: isStaff ? undefined : sourceWarehouseId,
+        targetWarehouseId: isStaff ? undefined : (targetWarehouseId || undefined),
+        recipientName:     recipientName.trim() || undefined,
         referenceNo:       referenceNo.trim() || undefined,
         notes:             notes.trim() || undefined,
         items:             items.map(i => ({
@@ -160,8 +178,8 @@ export default function StockOutwardModal({
             </div>
           )}
 
-          {/* Issue Type & Warehouse */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Issue Type & DC No. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
                 Issue Type *
@@ -178,24 +196,6 @@ export default function StockOutwardModal({
 
             <div>
               <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
-                Source Warehouse *
-              </label>
-              <select
-                required
-                value={sourceWarehouseId}
-                onChange={e => setSourceWarehouseId(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                {warehouses.map(w => (
-                  <option key={w._id} value={w._id}>
-                    {w.name} ({w.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
                 Delivery Challan / DC No.
               </label>
               <input
@@ -207,6 +207,82 @@ export default function StockOutwardModal({
               />
             </div>
           </div>
+
+          {/* From / To */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
+                From *
+              </label>
+              {isStaff ? (
+                <div className="w-full px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm">
+                  {currentUser.name}
+                </div>
+              ) : (
+                <select
+                  required
+                  value={sourceWarehouseId}
+                  onChange={e => setSourceWarehouseId(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  {warehouses.map(w => (
+                    <option key={w._id} value={w._id}>
+                      {w.name} ({w.code})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {isStaff ? (
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
+                  To (Recipient Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Customer / individual name"
+                  value={recipientName}
+                  onChange={e => setRecipientName(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
+                  Destination Warehouse
+                </label>
+                <select
+                  value={targetWarehouseId}
+                  onChange={e => setTargetWarehouseId(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="">— None (going to a customer, see below) —</option>
+                  {warehouses.filter(w => w._id !== sourceWarehouseId).map(w => (
+                    <option key={w._id} value={w._id}>
+                      {w.name} ({w.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {!isStaff && (
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
+                Recipient Name <span className="font-normal normal-case text-slate-400">(if not going to a warehouse above)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Customer / individual name"
+                value={recipientName}
+                onChange={e => setRecipientName(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          )}
 
           {/* Items Table */}
           <div className="space-y-3">
@@ -331,11 +407,11 @@ export default function StockOutwardModal({
           {/* Notes */}
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
-              Dispatch Instructions / Recipient Details
+              Dispatch Instructions <span className="font-normal normal-case text-slate-400">(optional)</span>
             </label>
             <textarea
               rows={2}
-              placeholder="Customer name, destination address, driver/courier name..."
+              placeholder="Destination address, driver/courier name, delivery notes..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
               className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"

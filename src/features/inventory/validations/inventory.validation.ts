@@ -98,8 +98,16 @@ export type StockInwardInput = z.infer<typeof StockInwardInputSchema>
 
 // 2. Sales / Sample Outward
 export const StockOutwardInputSchema = z.object({
-  type:              z.enum([StockTransactionType.OutwardDispatch, StockTransactionType.OutwardSample]),
-  sourceWarehouseId: z.string({ required_error: 'Source warehouse is required' }).min(1),
+  type: z.enum([StockTransactionType.OutwardDispatch, StockTransactionType.OutwardSample]),
+  // Optional at the schema layer — Staff never send this (the server
+  // resolves their own linked warehouse); Admin/Manager are required to by
+  // recordStockOutwardAction's own role-based check.
+  sourceWarehouseId: z.string().optional().or(z.literal('')),
+  // "To" — a warehouse destination (Admin only) and/or a plain recipient
+  // name (Staff mandatory, Admin optional). At least one is required by
+  // recordStockOutwardAction.
+  targetWarehouseId: z.string().optional().or(z.literal('')),
+  recipientName:     z.string().trim().max(150).optional().or(z.literal('')),
   referenceNo:       z.string().trim().optional().or(z.literal('')),
   enquiryId:         z.string().optional().or(z.literal('')),
   distributorId:     z.string().optional().or(z.literal('')),

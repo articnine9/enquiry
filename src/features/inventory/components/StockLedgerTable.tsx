@@ -247,6 +247,19 @@ export default function StockLedgerTable({
                               </span>
                             </div>
                           </div>
+                        ) : (m.type === StockTransactionType.OutwardDispatch || m.type === StockTransactionType.OutwardSample) && (m.targetWarehouseName || m.recipientName) ? (
+                          <div className="space-y-0.5">
+                            <div>
+                              <span className="text-slate-400">From:</span>{' '}
+                              <span className="font-medium">{m.sourceWarehouseName}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">To:</span>{' '}
+                              <span className="font-medium text-blue-600 dark:text-blue-400">
+                                {m.targetWarehouseName || m.recipientName}
+                              </span>
+                            </div>
+                          </div>
                         ) : m.targetWarehouseName ? (
                           <div>
                             <span className="text-slate-400">Into:</span>{' '}

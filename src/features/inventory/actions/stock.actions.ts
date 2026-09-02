@@ -4,14 +4,14 @@ import { revalidateTag } from 'next/cache'
 import mongoose from 'mongoose'
 import dbConnect from '@/lib/db/connection'
 import Product from '@/lib/db/models/Product'
-import Warehouse from '@/lib/db/models/Warehouse'
+import Warehouse, { type WarehouseDocument } from '@/lib/db/models/Warehouse'
 import StockLevel from '@/lib/db/models/StockLevel'
 import StockBatch from '@/lib/db/models/StockBatch'
 import StockTransaction from '@/lib/db/models/StockTransaction'
 import ActivityLog from '@/lib/db/models/ActivityLog'
 import { requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { CACHE_TAGS } from '@/lib/cache'
-import { ActivityAction, EntityType, StockTransactionType } from '@/types/enums'
+import { ActivityAction, EntityType, StockTransactionType, UserRole } from '@/types/enums'
 import {
   StockInwardInputSchema,
   StockOutwardInputSchema,
@@ -69,6 +69,7 @@ export interface StockTransactionRow {
   distributorId?:      string
   performedBy:         string
   performerName?:      string
+  recipientName?:      string
   notes?:              string
   createdAt:           string
 }
@@ -214,10 +215,48 @@ export async function recordStockOutwardAction(
       }
     }
 
-    const { type, sourceWarehouseId, referenceNo, enquiryId, distributorId, items, notes } = parsed.data
+    const { type, targetWarehouseId, recipientName, referenceNo, enquiryId, distributorId, items, notes } = parsed.data
+
+    // "From" — Staff always dispatch out of their own linked warehouse
+    // (server-resolved, never trust a client-sent sourceWarehouseId for
+    // them); Admin/Manager pick one explicitly.
+    let sourceWarehouseId: string
+    if (session.user.role === UserRole.Staff) {
+      const ownWarehouse = await Warehouse.findOne({ managerId: session.user.id, isActive: true }).lean()
+      if (!ownWarehouse) {
+        return { ok: false, error: 'No warehouse is linked to your account yet — contact an admin' }
+      }
+      sourceWarehouseId = String(ownWarehouse._id)
+      if (targetWarehouseId) {
+        return { ok: false, error: 'Staff dispatches cannot select a destination warehouse' }
+      }
+      if (!recipientName) {
+        return { ok: false, error: 'Recipient name is required' }
+      }
+    } else {
+      if (!parsed.data.sourceWarehouseId) {
+        return { ok: false, error: 'Source warehouse is required' }
+      }
+      sourceWarehouseId = parsed.data.sourceWarehouseId
+      if (!targetWarehouseId && !recipientName) {
+        return { ok: false, error: 'Select a destination warehouse or enter a recipient name' }
+      }
+    }
+
     const warehouse = await Warehouse.findById(sourceWarehouseId)
     if (!warehouse) {
       return { ok: false, error: 'Source warehouse not found' }
+    }
+
+    let targetWh: WarehouseDocument | null = null
+    if (targetWarehouseId) {
+      targetWh = await Warehouse.findById(targetWarehouseId)
+      if (!targetWh) {
+        return { ok: false, error: 'Destination warehouse not found' }
+      }
+      if (String(targetWh._id) === String(warehouse._id)) {
+        return { ok: false, error: 'Source and destination warehouses must be different' }
+      }
     }
 
     // Check stock availability
@@ -271,6 +310,44 @@ export async function recordStockOutwardAction(
         )
       }
 
+      // Dispatching to another warehouse (e.g. a distributor's depot) —
+      // credit the destination the same way Transfer does, so both ends of
+      // the movement are reflected in stock levels, not just the source.
+      if (targetWh) {
+        await StockLevel.findOneAndUpdate(
+          { productId: item.productId, warehouseId: targetWh._id },
+          {
+            $inc: { quantityOnHand: item.quantity },
+            $set: { lastRestockedAt: new Date() },
+          },
+          { upsert: true, new: true }
+        )
+
+        if (item.batchNumber && item.batchNumber.trim()) {
+          const batchNum = item.batchNumber.trim().toUpperCase()
+          const sourceBatch = await StockBatch.findOne({
+            productId:   item.productId,
+            warehouseId: warehouse._id,
+            batchNumber: batchNum,
+          })
+          if (sourceBatch) {
+            await StockBatch.findOneAndUpdate(
+              { productId: item.productId, warehouseId: targetWh._id, batchNumber: batchNum },
+              {
+                $inc: { quantity: item.quantity },
+                $set: {
+                  manufacturingDate: sourceBatch.manufacturingDate,
+                  expiryDate:        sourceBatch.expiryDate,
+                  costPrice:         sourceBatch.costPrice,
+                  isActive:          true,
+                },
+              },
+              { upsert: true, new: true }
+            )
+          }
+        }
+      }
+
       transactionItems.push({
         productId:   product?._id || new mongoose.Types.ObjectId(item.productId),
         batchNumber: item.batchNumber ? item.batchNumber.trim().toUpperCase() : undefined,
@@ -285,6 +362,8 @@ export async function recordStockOutwardAction(
       transactionNo,
       type,
       sourceWarehouseId: warehouse._id,
+      targetWarehouseId: targetWh?._id,
+      recipientName:     recipientName || undefined,
       items:             transactionItems,
       referenceNo,
       enquiryId:         enquiryId ? new mongoose.Types.ObjectId(enquiryId) : undefined,
@@ -300,7 +379,10 @@ export async function recordStockOutwardAction(
       action:     ActivityAction.StockOutward,
       entityType: EntityType.StockTransaction,
       entityId:   transaction._id,
-      metadata:   { transactionNo, sourceWarehouse: warehouse.name, itemCount: items.length },
+      metadata:   {
+        transactionNo, sourceWarehouse: warehouse.name, itemCount: items.length,
+        targetWarehouse: targetWh?.name, recipientName,
+      },
     })
 
     revalidateTag(CACHE_TAGS.stock)
@@ -315,6 +397,9 @@ export async function recordStockOutwardAction(
         type:                transaction.type,
         sourceWarehouseId:   String(warehouse._id),
         sourceWarehouseName: warehouse.name,
+        targetWarehouseId:   targetWh ? String(targetWh._id) : undefined,
+        targetWarehouseName: targetWh?.name,
+        recipientName:       transaction.recipientName,
         items:               items.map(i => ({ ...i, quantity: i.quantity })),
         referenceNo:         transaction.referenceNo,
         performedBy:         String(session.user.id),
@@ -686,6 +771,7 @@ export async function getStockLedgerAction(
         distributorId:       t.distributorId ? String(t.distributorId) : undefined,
         performedBy:         perf?._id ? String(perf._id) : String(t.performedBy),
         performerName:       perf?.name,
+        recipientName:       t.recipientName,
         notes:               t.notes,
         createdAt:           t.createdAt ? t.createdAt.toISOString() : new Date().toISOString(),
       }

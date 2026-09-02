@@ -50,12 +50,18 @@ import {
   type StockTransactionRow,
 } from '../actions/stock.actions'
 import { getInventoryMasterOptionsAction } from '@/features/settings/actions/masterData.actions'
+import { canPerform } from '@/lib/permissions'
+import type { UserRole } from '@/types/enums'
 
 type ActiveTab = 'products' | 'movements' | 'warehouses' | 'alerts'
 
 const VALID_TABS: ActiveTab[] = ['products', 'movements', 'warehouses', 'alerts']
 
-export default function InventoryDashboard() {
+interface InventoryDashboardProps {
+  currentUser: { role: UserRole; name: string }
+}
+
+export default function InventoryDashboard({ currentUser }: InventoryDashboardProps) {
   const searchParams = useSearchParams()
   const initialTab = VALID_TABS.find((t) => t === searchParams.get('tab')) ?? 'products'
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab)
@@ -190,6 +196,11 @@ export default function InventoryDashboard() {
     if (activeTab === 'movements') fetchMovements()
   }
 
+  const canCreateProduct = canPerform(currentUser.role, 'inventory:create')
+  const canInward         = canPerform(currentUser.role, 'stock:inward')
+  const canTransfer       = canPerform(currentUser.role, 'stock:transfer')
+  const canAdjust         = canPerform(currentUser.role, 'stock:adjust')
+
   function handleOpenCreateProduct() {
     setEditingProduct(null)
     setIsProductModalOpen(true)
@@ -217,13 +228,15 @@ export default function InventoryDashboard() {
               <RefreshCw className="w-4 h-4" />
             </button>
 
-            <button
-              onClick={() => setIsInwardModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-emerald-950 bg-emerald-300 hover:bg-emerald-200 shadow-sm transition-colors"
-            >
-              <ArrowDownLeft className="w-4 h-4" />
-              Inward Stock
-            </button>
+            {canInward && (
+              <button
+                onClick={() => setIsInwardModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-emerald-950 bg-emerald-300 hover:bg-emerald-200 shadow-sm transition-colors"
+              >
+                <ArrowDownLeft className="w-4 h-4" />
+                Inward Stock
+              </button>
+            )}
 
             <button
               onClick={() => setIsOutwardModalOpen(true)}
@@ -233,29 +246,35 @@ export default function InventoryDashboard() {
               Dispatch / Sample
             </button>
 
-            <button
-              onClick={() => setIsTransferModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-purple-950 bg-purple-200 hover:bg-purple-100 shadow-sm transition-colors"
-            >
-              <ArrowLeftRight className="w-4 h-4" />
-              Transfer
-            </button>
+            {canTransfer && (
+              <button
+                onClick={() => setIsTransferModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-purple-950 bg-purple-200 hover:bg-purple-100 shadow-sm transition-colors"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                Transfer
+              </button>
+            )}
 
-            <button
-              onClick={() => setIsAdjustmentModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-amber-950 bg-amber-200 hover:bg-amber-100 shadow-sm transition-colors"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              Adjust / Audit
-            </button>
+            {canAdjust && (
+              <button
+                onClick={() => setIsAdjustmentModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-amber-950 bg-amber-200 hover:bg-amber-100 shadow-sm transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Adjust / Audit
+              </button>
+            )}
 
-            <button
-              onClick={handleOpenCreateProduct}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-indigo-900 bg-white hover:bg-slate-100 shadow-sm transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              New Product
-            </button>
+            {canCreateProduct && (
+              <button
+                onClick={handleOpenCreateProduct}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-indigo-900 bg-white hover:bg-slate-100 shadow-sm transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                New Product
+              </button>
+            )}
           </div>
         }
       />
@@ -472,7 +491,7 @@ export default function InventoryDashboard() {
         <LowStockAlertCard
           lowStockItems={lowStockAlerts}
           expiringBatches={expiringBatches}
-          onRestock={() => setIsInwardModalOpen(true)}
+          onRestock={() => canInward && setIsInwardModalOpen(true)}
         />
       )}
 
@@ -507,6 +526,7 @@ export default function InventoryDashboard() {
           onSuccess={handleRefreshAll}
           products={products}
           warehouses={warehouses}
+          currentUser={currentUser}
         />
       )}
 

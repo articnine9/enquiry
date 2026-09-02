@@ -5,8 +5,9 @@ import { revalidateTag } from 'next/cache'
 import dbConnect from '@/lib/db/connection'
 import User from '@/lib/db/models/User'
 import LocationZone from '@/lib/db/models/LocationZone'
+import Warehouse from '@/lib/db/models/Warehouse'
 import { requireRole, requireSession } from '@/lib/auth/session'
-import { UserRole, UserStatus } from '@/types/enums'
+import { UserRole, UserStatus, WarehouseType } from '@/types/enums'
 import {
   CreateUserSchema, UpdateUserSchema, UpdateOwnProfileSchema,
   ChangePasswordSchema, AdminResetPasswordSchema,
@@ -15,6 +16,26 @@ import {
 import type { ActionResult, PaginatedResult } from '@/types/api'
 
 function toPlain<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
+
+/**
+ * Every Staff member (== a Distributor login, in this business) dispatches
+ * stock out of their own warehouse — create it alongside their account so
+ * the Inventory Dispatch flow always has one to resolve. Reuses the
+ * previously-unused Warehouse.managerId field as the ownership link.
+ */
+async function ensureStaffWarehouse(staffId: string, staffName: string): Promise<void> {
+  const existing = await Warehouse.findOne({ managerId: staffId }).select('_id').lean()
+  if (existing) return
+
+  const code = `ST-${String(staffId).slice(-6).toUpperCase()}`
+  await Warehouse.create({
+    code,
+    name:      `${staffName} Depot`,
+    type:      WarehouseType.DistributorDepot,
+    managerId: staffId,
+    isActive:  true,
+  })
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -174,6 +195,10 @@ export async function createUserAction(
       assignedTaluks:    parsed.data.assignedTaluks,
     })
 
+    if (user.role === UserRole.Staff) {
+      await ensureStaffWarehouse(String(user._id), user.name)
+    }
+
     revalidateTag('users')
     return { ok: true, data: { id: String(user._id) } }
   } catch (err: unknown) {
@@ -220,7 +245,10 @@ export async function updateUserAction(
     if (parsed.data.assignedDistricts != null) update['assignedDistricts'] = parsed.data.assignedDistricts
     if (parsed.data.assignedTaluks    != null) update['assignedTaluks']    = parsed.data.assignedTaluks
 
-    await User.findByIdAndUpdate(id, { $set: update })
+    const updated = await User.findByIdAndUpdate(id, { $set: update }, { new: true }).select('role name').lean()
+    if (updated?.role === UserRole.Staff) {
+      await ensureStaffWarehouse(id, updated.name)
+    }
 
     revalidateTag('users')
     return { ok: true, data: null }

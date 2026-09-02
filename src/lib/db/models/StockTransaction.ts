@@ -21,6 +21,7 @@ export interface IStockTransaction {
   enquiryId?:          Types.ObjectId
   distributorId?:      Types.ObjectId
   performedBy:         Types.ObjectId
+  recipientName?:      string
   notes?:              string
   attachments?:        string[]
   createdAt:           Date
@@ -115,6 +116,14 @@ const StockTransactionSchema = new Schema<StockTransactionDocument>(
       ref:      'User',
       required: [true, 'Operator user is required'],
       index:    true,
+    },
+    // "To", for a direct dispatch to an individual/customer rather than a
+    // target warehouse — Staff dispatches always set this, Admin dispatches
+    // set either this or targetWarehouseId.
+    recipientName: {
+      type:      String,
+      trim:      true,
+      maxlength: [150, 'Recipient name cannot exceed 150 characters'],
     },
     notes: {
       type:      String,
