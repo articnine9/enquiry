@@ -12,15 +12,19 @@ import {
   Boxes,
   X,
   AlertCircle,
+  BarChart3,
 } from 'lucide-react'
-import { WarehouseType, WAREHOUSE_TYPE_LABELS } from '@/types/enums'
+import { WarehouseType, WAREHOUSE_TYPE_LABELS, UserRole } from '@/types/enums'
+import { canPerform } from '@/lib/permissions'
 import type { WarehouseRow } from '../actions/warehouse.actions'
 import { createWarehouseAction, updateWarehouseAction } from '../actions/warehouse.actions'
+import { getWarehouseStockBreakdownAction, type WarehouseStockBreakdown } from '../actions/stock.actions'
 import { toast } from 'sonner'
 
 interface WarehouseManagementProps {
   warehouses:      WarehouseRow[]
   warehouseTypes?: Array<{ value: string; label: string }>
+  currentUser:     { role: UserRole; name: string }
   onRefresh:       () => void
 }
 
@@ -32,11 +36,17 @@ const DEFAULT_WAREHOUSE_TYPES = Object.values(WarehouseType).map(t => ({
 export default function WarehouseManagement({
   warehouses,
   warehouseTypes = DEFAULT_WAREHOUSE_TYPES,
+  currentUser,
   onRefresh,
 }: WarehouseManagementProps) {
   const typesList = warehouseTypes.length > 0 ? warehouseTypes : DEFAULT_WAREHOUSE_TYPES
+  const canManage = canPerform(currentUser.role, 'warehouse:manage')
+  const canViewBreakdown = currentUser.role !== UserRole.Staff
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingWarehouse, setEditingWarehouse] = useState<WarehouseRow | null>(null)
+  const [breakdownWarehouse, setBreakdownWarehouse] = useState<WarehouseRow | null>(null)
+  const [breakdown, setBreakdown] = useState<WarehouseStockBreakdown | null>(null)
+  const [isBreakdownLoading, setIsBreakdownLoading] = useState(false)
 
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -72,6 +82,16 @@ export default function WarehouseManagement({
     setContactPhone(w.contactPhone || '')
     setError(null)
     setIsModalOpen(true)
+  }
+
+  async function openBreakdown(w: WarehouseRow) {
+    setBreakdownWarehouse(w)
+    setBreakdown(null)
+    setIsBreakdownLoading(true)
+    const res = await getWarehouseStockBreakdownAction(w._id)
+    if (res.ok) setBreakdown(res.data)
+    else toast.error(res.error || 'Failed to load stock details')
+    setIsBreakdownLoading(false)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -126,13 +146,15 @@ export default function WarehouseManagement({
             Multi-location inventory storage depots and fulfillment centers
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Warehouse
-        </button>
+        {canManage && (
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Warehouse
+          </button>
+        )}
       </div>
 
       {/* Warehouse Cards Grid */}
@@ -159,13 +181,26 @@ export default function WarehouseManagement({
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => openEdit(w)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Edit warehouse"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                {canViewBreakdown && (
+                  <button
+                    onClick={() => openBreakdown(w)}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="View stock details"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    onClick={() => openEdit(w)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Edit warehouse"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Address & Contact */}
@@ -353,6 +388,89 @@ export default function WarehouseManagement({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stock details breakdown (Admin/Manager) */}
+      {breakdownWarehouse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Stock Details</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{breakdownWarehouse.name}</p>
+              </div>
+              <button
+                onClick={() => setBreakdownWarehouse(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {isBreakdownLoading ? (
+                <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
+              ) : breakdown ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                      <div className="text-[11px] text-slate-400">Current Balance</div>
+                      <div className="text-lg font-bold text-slate-900 dark:text-white">
+                        {breakdown.currentBalance.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
+                      <div className="text-[11px] text-slate-400">Total Received</div>
+                      <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                        {breakdown.totalReceived.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                      <div className="text-[11px] text-slate-400">Total Issued</div>
+                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                        {breakdown.totalIssued.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Received by type</h4>
+                    {breakdown.receivedByType.length === 0 ? (
+                      <p className="text-xs text-slate-400">No inward movements yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {breakdown.receivedByType.map(r => (
+                          <div key={r.type} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-600 dark:text-slate-400 capitalize">{r.type.replace(/_/g, ' ')}</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{r.quantity.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Issued by type</h4>
+                    {breakdown.issuedByType.length === 0 ? (
+                      <p className="text-xs text-slate-400">No outward movements yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {breakdown.issuedByType.map(r => (
+                          <div key={r.type} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-600 dark:text-slate-400 capitalize">{r.type.replace(/_/g, ' ')}</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{r.quantity.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-rose-600 text-center py-6">Failed to load stock details.</p>
+              )}
+            </div>
           </div>
         </div>
       )}

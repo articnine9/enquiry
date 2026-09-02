@@ -9,9 +9,10 @@ import StockLevel from '@/lib/db/models/StockLevel'
 import StockBatch from '@/lib/db/models/StockBatch'
 import StockTransaction from '@/lib/db/models/StockTransaction'
 import ActivityLog from '@/lib/db/models/ActivityLog'
-import { requirePermission, authErrorToResult } from '@/lib/auth/session'
+import { requirePermission, requireRole, authErrorToResult } from '@/lib/auth/session'
 import { CACHE_TAGS } from '@/lib/cache'
 import { ActivityAction, EntityType, StockTransactionType, UserRole } from '@/types/enums'
+import { resolveWarehouseScope } from '../services/warehouse-scope.service'
 import {
   StockInwardInputSchema,
   StockOutwardInputSchema,
@@ -691,8 +692,10 @@ export async function getStockLedgerAction(
   rawFilter: Record<string, unknown> = {}
 ): Promise<ActionResult<PaginatedResult<StockTransactionRow>>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const parsed = StockLedgerFilterSchema.safeParse(rawFilter)
     const { productId, warehouseId, type, startDate, endDate, page, limit } = parsed.success
@@ -709,7 +712,11 @@ export async function getStockLedgerAction(
       query['items.productId'] = new mongoose.Types.ObjectId(productId.trim())
     }
 
-    if (warehouseId && warehouseId.trim()) {
+    if (scope) {
+      // Staff — always restricted to their own warehouse(s), regardless of
+      // whatever the client's filter dropdown sent.
+      query.$or = [{ sourceWarehouseId: { $in: scope } }, { targetWarehouseId: { $in: scope } }]
+    } else if (warehouseId && warehouseId.trim()) {
       const whId = new mongoose.Types.ObjectId(warehouseId.trim())
       query.$or = [{ sourceWarehouseId: whId }, { targetWarehouseId: whId }]
     }
@@ -795,6 +802,80 @@ export async function getStockLedgerAction(
     return {
       ok:    false,
       error: err instanceof Error ? err.message : 'Failed to fetch stock movements',
+    }
+  }
+}
+
+// ─── 6. Per-warehouse stock breakdown (Admin/Manager) ─────────────────────────
+
+export interface WarehouseStockBreakdown {
+  warehouseId:      string
+  warehouseName:    string
+  currentBalance:   number
+  totalReceived:    number
+  receivedByType:   Array<{ type: string; quantity: number }>
+  totalIssued:      number
+  issuedByType:     Array<{ type: string; quantity: number }>
+}
+
+/**
+ * "Admin should be able to view the complete stock details of each
+ * distributor, including their current stock balance, received stock,
+ * transferred/issued stock, and existing stock." Admin/Manager only — a
+ * Staff/distributor's own KPI cards already cover their current balance,
+ * this extra received-vs-issued breakdown is an Admin oversight view.
+ */
+export async function getWarehouseStockBreakdownAction(
+  warehouseId: string
+): Promise<ActionResult<WarehouseStockBreakdown>> {
+  try {
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await dbConnect()
+
+    const warehouse = await Warehouse.findById(warehouseId).select('name').lean()
+    if (!warehouse) {
+      return { ok: false, error: 'Warehouse not found' }
+    }
+    const whId = new mongoose.Types.ObjectId(warehouseId)
+
+    const [balanceAgg, receivedAgg, issuedAgg] = await Promise.all([
+      StockLevel.aggregate([
+        { $match: { warehouseId: whId } },
+        { $group: { _id: null, total: { $sum: '$quantityOnHand' } } },
+      ]),
+      StockTransaction.aggregate([
+        { $match: { targetWarehouseId: whId } },
+        { $unwind: '$items' },
+        { $group: { _id: '$type', quantity: { $sum: '$items.quantity' } } },
+      ]),
+      StockTransaction.aggregate([
+        { $match: { sourceWarehouseId: whId } },
+        { $unwind: '$items' },
+        { $group: { _id: '$type', quantity: { $sum: '$items.quantity' } } },
+      ]),
+    ])
+
+    const receivedByType = receivedAgg.map((r) => ({ type: String(r._id), quantity: r.quantity as number }))
+    const issuedByType   = issuedAgg.map((r) => ({ type: String(r._id), quantity: r.quantity as number }))
+
+    return {
+      ok: true,
+      data: toPlain({
+        warehouseId,
+        warehouseName:  warehouse.name,
+        currentBalance: balanceAgg[0]?.total ?? 0,
+        totalReceived:  receivedByType.reduce((sum, r) => sum + r.quantity, 0),
+        receivedByType,
+        totalIssued:    issuedByType.reduce((sum, r) => sum + r.quantity, 0),
+        issuedByType,
+      }),
+    }
+  } catch (err) {
+    const authErr = authErrorToResult(err)
+    if (authErr) return authErr
+    return {
+      ok:    false,
+      error: err instanceof Error ? err.message : 'Failed to fetch warehouse stock breakdown',
     }
   }
 }

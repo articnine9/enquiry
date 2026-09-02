@@ -6,6 +6,7 @@ import Warehouse from '@/lib/db/models/Warehouse'
 import StockLevel from '@/lib/db/models/StockLevel'
 import { requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { CACHE_TAGS } from '@/lib/cache'
+import { resolveWarehouseScope } from '../services/warehouse-scope.service'
 import { WarehouseInputSchema, type WarehouseInput } from '../validations/inventory.validation'
 import type { ActionResult } from '@/types/api'
 
@@ -38,10 +39,16 @@ export interface WarehouseRow {
 
 export async function getWarehousesAction(): Promise<ActionResult<WarehouseRow[]>> {
   try {
-    await requirePermission('warehouse:read')
+    const session = await requirePermission('warehouse:read')
     await dbConnect()
 
-    const warehouses = await Warehouse.find()
+    // Staff — only their own warehouse(s), never another distributor's or
+    // Admin's. This is also what scopes the Product Catalog / Ledger
+    // "Warehouse" filter dropdowns and the Warehouses tab, since they all
+    // just render whatever this returns.
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
+
+    const warehouses = await Warehouse.find(scope ? { _id: { $in: scope } } : {})
       .populate('managerId', 'name email')
       .populate('locationZoneId', 'name')
       .sort({ name: 1 })

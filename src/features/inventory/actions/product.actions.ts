@@ -10,6 +10,7 @@ import ActivityLog from '@/lib/db/models/ActivityLog'
 import { requirePermission, authErrorToResult } from '@/lib/auth/session'
 import { CACHE_TAGS } from '@/lib/cache'
 import { ActivityAction, EntityType } from '@/types/enums'
+import { resolveWarehouseScope } from '../services/warehouse-scope.service'
 import { ProductInputSchema, ProductFilterSchema, type ProductInput } from '../validations/inventory.validation'
 import type { ActionResult, PaginatedResult } from '@/types/api'
 
@@ -70,8 +71,10 @@ export async function getProductsAction(
   rawFilter: Record<string, unknown> = {}
 ): Promise<ActionResult<PaginatedResult<ProductRow>>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const parsed = ProductFilterSchema.safeParse(rawFilter)
     const { search, category, warehouseId, lowStockOnly, page, limit } = parsed.success
@@ -104,7 +107,11 @@ export async function getProductsAction(
 
     // Aggregate stock levels for these products
     const stockMatch: mongoose.FilterQuery<typeof StockLevel> = { productId: { $in: productIds } }
-    if (warehouseId) {
+    if (scope) {
+      // Staff — always restricted to their own warehouse(s), regardless of
+      // whatever the client's filter dropdown sent.
+      stockMatch.warehouseId = { $in: scope }
+    } else if (warehouseId) {
       stockMatch.warehouseId = new mongoose.Types.ObjectId(warehouseId)
     }
 
@@ -189,16 +196,22 @@ export async function getProductsAction(
 
 export async function getProductByIdAction(id: string): Promise<ActionResult<ProductDetail>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const p = await Product.findById(id).lean()
     if (!p) {
       return { ok: false, error: 'Product not found' }
     }
 
-    // Fetch warehouse stock levels
-    const stockLevels = await StockLevel.find({ productId: p._id })
+    // Fetch warehouse stock levels — Staff only ever see their own
+    // warehouse's row, never another distributor's or Admin's.
+    const stockLevels = await StockLevel.find({
+      productId: p._id,
+      ...(scope ? { warehouseId: { $in: scope } } : {}),
+    })
       .populate('warehouseId', 'name code')
       .lean()
 
@@ -222,7 +235,11 @@ export async function getProductByIdAction(id: string): Promise<ActionResult<Pro
     const thirtyDaysFromNow = new Date()
     thirtyDaysFromNow.setDate(now.getDate() + 30)
 
-    const batchesDoc = await StockBatch.find({ productId: p._id, quantity: { $gt: 0 } })
+    const batchesDoc = await StockBatch.find({
+      productId: p._id,
+      quantity:  { $gt: 0 },
+      ...(scope ? { warehouseId: { $in: scope } } : {}),
+    })
       .populate('warehouseId', 'name')
       .sort({ expiryDate: 1 })
       .lean()

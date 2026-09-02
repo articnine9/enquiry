@@ -7,6 +7,7 @@ import StockLevel from '@/lib/db/models/StockLevel'
 import StockBatch from '@/lib/db/models/StockBatch'
 import StockTransaction from '@/lib/db/models/StockTransaction'
 import { requirePermission, authErrorToResult } from '@/lib/auth/session'
+import { resolveWarehouseScope } from '../services/warehouse-scope.service'
 import type { ActionResult } from '@/types/api'
 
 function toPlain<T>(v: T): T {
@@ -54,8 +55,10 @@ export interface ExpiringBatchItem {
 
 export async function getInventoryStatsAction(): Promise<ActionResult<InventoryStats>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const [
       totalSkus,
@@ -66,12 +69,13 @@ export async function getInventoryStatsAction(): Promise<ActionResult<InventoryS
       recentTxCount,
     ] = await Promise.all([
       Product.countDocuments({ isActive: true }),
-      Warehouse.countDocuments({ isActive: true }),
+      scope ? Promise.resolve(scope.length) : Warehouse.countDocuments({ isActive: true }),
       Product.find({ isActive: true }).select('minStockLevel costPrice sellingPrice').lean(),
-      StockLevel.find().lean(),
-      StockBatch.find({ quantity: { $gt: 0 } }).lean(),
+      StockLevel.find(scope ? { warehouseId: { $in: scope } } : {}).lean(),
+      StockBatch.find({ quantity: { $gt: 0 }, ...(scope ? { warehouseId: { $in: scope } } : {}) }).lean(),
       StockTransaction.countDocuments({
         createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        ...(scope ? { $or: [{ sourceWarehouseId: { $in: scope } }, { targetWarehouseId: { $in: scope } }] } : {}),
       }),
     ])
 
@@ -159,14 +163,16 @@ export async function getInventoryStatsAction(): Promise<ActionResult<InventoryS
 
 export async function getLowStockAlertsAction(): Promise<ActionResult<LowStockAlertItem[]>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const products = await Product.find({ isActive: true }).lean()
     const productIds = products.map(p => p._id)
 
     const stockAgg = await StockLevel.aggregate([
-      { $match: { productId: { $in: productIds } } },
+      { $match: { productId: { $in: productIds }, ...(scope ? { warehouseId: { $in: scope } } : {}) } },
       {
         $group: {
           _id:            '$productId',
@@ -221,8 +227,10 @@ export async function getLowStockAlertsAction(): Promise<ActionResult<LowStockAl
 
 export async function getExpiringBatchesAction(): Promise<ActionResult<ExpiringBatchItem[]>> {
   try {
-    await requirePermission('inventory:read')
+    const session = await requirePermission('inventory:read')
     await dbConnect()
+
+    const scope = await resolveWarehouseScope(session.user.role, session.user.id)
 
     const now = new Date()
     const sixtyDays = new Date()
@@ -231,6 +239,7 @@ export async function getExpiringBatchesAction(): Promise<ActionResult<ExpiringB
     const batches = await StockBatch.find({
       quantity:   { $gt: 0 },
       expiryDate: { $lte: sixtyDays },
+      ...(scope ? { warehouseId: { $in: scope } } : {}),
     })
       .populate('productId', 'name sku')
       .populate('warehouseId', 'name')

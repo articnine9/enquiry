@@ -197,6 +197,7 @@ export default function InventoryDashboard({ currentUser }: InventoryDashboardPr
   }
 
   const canCreateProduct = canPerform(currentUser.role, 'inventory:create')
+  const canUpdateProduct = canPerform(currentUser.role, 'inventory:update')
   const canInward         = canPerform(currentUser.role, 'stock:inward')
   const canTransfer       = canPerform(currentUser.role, 'stock:transfer')
   const canAdjust         = canPerform(currentUser.role, 'stock:adjust')
@@ -440,6 +441,8 @@ export default function InventoryDashboard({ currentUser }: InventoryDashboardPr
           products={products}
           categories={masterCategories.length > 0 ? masterCategories : categories}
           warehouses={warehouses}
+          canCreateProduct={canCreateProduct}
+          canUpdateProduct={canUpdateProduct}
           onAddProduct={handleOpenCreateProduct}
           onEditProduct={handleOpenEditProduct}
           onRefresh={handleRefreshAll}
@@ -483,6 +486,7 @@ export default function InventoryDashboard({ currentUser }: InventoryDashboardPr
         <WarehouseManagement
           warehouses={warehouses}
           warehouseTypes={masterWarehouseTypes}
+          currentUser={currentUser}
           onRefresh={handleRefreshAll}
         />
       )}

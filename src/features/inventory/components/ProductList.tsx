@@ -25,6 +25,8 @@ interface ProductListProps {
   products:     ProductRow[]
   categories:   Array<{ value: string; label: string }> | string[]
   warehouses:   WarehouseRow[]
+  canCreateProduct: boolean
+  canUpdateProduct: boolean
   onAddProduct: () => void
   onEditProduct: (product: ProductRow) => void
   onRefresh:    () => void
@@ -47,6 +49,8 @@ export default function ProductList({
   products,
   categories,
   warehouses,
+  canCreateProduct,
+  canUpdateProduct,
   onAddProduct,
   onEditProduct,
   onRefresh,
@@ -160,13 +164,15 @@ export default function ProductList({
         </div>
 
         {/* Add Product Button */}
-        <button
-          onClick={onAddProduct}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Product
-        </button>
+        {canCreateProduct && (
+          <button
+            onClick={onAddProduct}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Product
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -301,29 +307,33 @@ export default function ProductList({
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => onEditProduct(p)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Edit product"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(p._id)}
-                            disabled={togglingId === p._id}
-                            className={`p-1.5 rounded-lg transition-colors ${
-                              p.isActive
-                                ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30'
-                                : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-                            }`}
-                            title={p.isActive ? 'Deactivate product' : 'Activate product'}
-                          >
-                            {p.isActive ? (
-                              <XCircle className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4" />
-                            )}
-                          </button>
+                          {canUpdateProduct && (
+                            <>
+                              <button
+                                onClick={() => onEditProduct(p)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                title="Edit product"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleToggleStatus(p._id)}
+                                disabled={togglingId === p._id}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  p.isActive
+                                    ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                                    : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                                }`}
+                                title={p.isActive ? 'Deactivate product' : 'Activate product'}
+                              >
+                                {p.isActive ? (
+                                  <XCircle className="w-4 h-4" />
+                                ) : (
+                                  <CheckCircle2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
