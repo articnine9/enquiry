@@ -196,8 +196,12 @@ async function _createAssignmentRecord(params: {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Auto-assign based on pincode / district / city.
+ * Auto-assign based on pincode / district / taluk.
  * Called by createEnquiry server action after a form submit.
+ *
+ * Tiers: staff district/taluk coverage → zone match → Admin (last resort,
+ * so nothing is ever left unassigned even when no staff/zone covers the
+ * enquiry's location).
  */
 export async function autoAssign(
   params: AutoAssignParams
@@ -227,7 +231,7 @@ export async function autoAssign(
       return { ok: true, data: toPlain(assignment) }
     }
 
-    // 2 — Fall back to zone-based resolution, then any available staff.
+    // 2 — Fall back to zone-based resolution.
     const zoneResolution = await resolveZone({
       pincode:  params.pincode,
       district: params.district,
@@ -236,19 +240,40 @@ export async function autoAssign(
     const staffResolution = await resolveStaff({
       zone: zoneResolution.zone as LocationZoneDocument | null,
     })
-    if (!staffResolution) {
-      return { ok: false, error: 'No available staff found for auto-assignment' }
+    if (staffResolution) {
+      const assignment = await _createAssignmentRecord({
+        enquiryId,
+        staffId:    staffResolution.staffId,
+        actorId,
+        actorRole:  params.actorRole,
+        zoneId:     zoneResolution.zone?._id ?? null,
+        type:       AssignmentType.Auto,
+        matchTier:  zoneResolution.matchTier,
+        reason:     `Auto-assigned via ${zoneResolution.matchTier} match`,
+      })
+      return { ok: true, data: toPlain(assignment) }
+    }
+
+    // 3 — Nobody geographically covers this enquiry. Rather than guessing at
+    // an unrelated-region staff member, fall back to Admin so nothing is
+    // ever left unassigned.
+    const admin = await User.findOne({ role: UserRole.SuperAdmin, status: UserStatus.Active })
+      .sort({ currentLoad: 1 })
+      .select('_id locationZoneId')
+      .lean()
+    if (!admin) {
+      return { ok: false, error: 'No available staff or Admin found for auto-assignment' }
     }
 
     const assignment = await _createAssignmentRecord({
       enquiryId,
-      staffId:    staffResolution.staffId,
+      staffId:    admin._id,
       actorId,
       actorRole:  params.actorRole,
-      zoneId:     zoneResolution.zone?._id ?? null,
+      zoneId:     admin.locationZoneId ?? null,
       type:       AssignmentType.Auto,
-      matchTier:  zoneResolution.matchTier,
-      reason:     `Auto-assigned via ${zoneResolution.matchTier} match`,
+      matchTier:  ZoneMatchTier.Global,
+      reason:     'Auto-assigned to Admin — no staff or zone covers this location',
     })
 
     return { ok: true, data: toPlain(assignment) }

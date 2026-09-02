@@ -114,10 +114,14 @@ export async function getDistributorAction(id: string): Promise<ActionResult<Dis
   }
 }
 
-/** Lightweight list for the Dealer form's distributor picker. */
+/**
+ * Lightweight list for the Dealer form's distributor picker, and for the
+ * Distributor filter dropdown on the Enquiries page — Staff need this too
+ * (read-only), not just SuperAdmin/Manager who manage Distributors.
+ */
 export async function getDistributorsForSelectAction(): Promise<ActionResult<DistributorOption[]>> {
   try {
-    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff)
     await dbConnect()
 
     const distributors = await Distributor.find({ isActive: true })

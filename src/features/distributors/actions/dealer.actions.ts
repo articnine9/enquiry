@@ -50,11 +50,15 @@ async function validateServiceLocations(
 
 // ── List (by distributor) ───────────────────────────────────────────────────────
 
+/**
+ * Also used (read-only) by the Dealer filter dropdown on the Enquiries page,
+ * which Staff see too — not just SuperAdmin/Manager who manage Dealers.
+ */
 export async function getDealersByDistributorAction(
   distributorId: string
 ): Promise<ActionResult<DealerRow[]>> {
   try {
-    await requireRole(UserRole.SuperAdmin, UserRole.Manager)
+    await requireRole(UserRole.SuperAdmin, UserRole.Manager, UserRole.Staff)
     await dbConnect()
 
     const dealers = await Dealer.find({ distributorId }).sort({ name: 1 }).lean()
