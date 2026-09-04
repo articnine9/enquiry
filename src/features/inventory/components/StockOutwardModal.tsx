@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X, ArrowUpRight, Plus, Trash2, AlertCircle } from 'lucide-react'
-import { StockTransactionType, UserRole } from '@/types/enums'
+import { StockTransactionType, UserRole, WarehouseType } from '@/types/enums'
 import { recordStockOutwardAction } from '../actions/stock.actions'
 import type { ProductRow } from '../actions/product.actions'
 import type { WarehouseRow } from '../actions/warehouse.actions'
@@ -33,8 +33,13 @@ export default function StockOutwardModal({
   currentUser,
 }: StockOutwardModalProps) {
   const isStaff = currentUser.role === UserRole.Staff
+  // Admin/Manager always dispatch out of the one Central warehouse — never
+  // a manual pick (see StockOutwardModal's "From" section below). The
+  // server independently enforces this too; this is just so the rest of
+  // the form (e.g. the "To" list, which excludes the source) stays correct.
+  const centralWarehouse = warehouses.find(w => w.type === WarehouseType.Central)
   const [type, setType] = useState<StockTransactionType>(StockTransactionType.OutwardDispatch)
-  const [sourceWarehouseId, setSourceWarehouseId] = useState(warehouses[0]?._id || '')
+  const [sourceWarehouseId] = useState(isStaff ? '' : (centralWarehouse?._id || ''))
   const [targetWarehouseId, setTargetWarehouseId] = useState('')
   const [recipientName, setRecipientName] = useState('')
   const [referenceNo, setReferenceNo] = useState('')
@@ -96,7 +101,7 @@ export default function StockOutwardModal({
       }
     } else {
       if (!sourceWarehouseId) {
-        setError('Please select a source warehouse')
+        setError('No Central warehouse is configured — contact an admin')
         return
       }
       if (!targetWarehouseId && !recipientName.trim()) {
@@ -214,24 +219,9 @@ export default function StockOutwardModal({
               <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
                 From *
               </label>
-              {isStaff ? (
-                <div className="w-full px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm">
-                  {currentUser.name}
-                </div>
-              ) : (
-                <select
-                  required
-                  value={sourceWarehouseId}
-                  onChange={e => setSourceWarehouseId(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  {warehouses.map(w => (
-                    <option key={w._id} value={w._id}>
-                      {w.name} ({w.code})
-                    </option>
-                  ))}
-                </select>
-              )}
+              <div className="w-full px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm">
+                {isStaff ? currentUser.name : (centralWarehouse ? `Admin (${centralWarehouse.name})` : 'No Central warehouse configured')}
+              </div>
             </div>
 
             {isStaff ? (

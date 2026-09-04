@@ -11,7 +11,7 @@ import StockTransaction from '@/lib/db/models/StockTransaction'
 import ActivityLog from '@/lib/db/models/ActivityLog'
 import { requirePermission, requireRole, authErrorToResult } from '@/lib/auth/session'
 import { CACHE_TAGS } from '@/lib/cache'
-import { ActivityAction, EntityType, StockTransactionType, UserRole } from '@/types/enums'
+import { ActivityAction, EntityType, StockTransactionType, UserRole, WarehouseType } from '@/types/enums'
 import { resolveWarehouseScope } from '../services/warehouse-scope.service'
 import {
   StockInwardInputSchema,
@@ -218,9 +218,10 @@ export async function recordStockOutwardAction(
 
     const { type, targetWarehouseId, recipientName, referenceNo, enquiryId, distributorId, items, notes } = parsed.data
 
-    // "From" — Staff always dispatch out of their own linked warehouse
-    // (server-resolved, never trust a client-sent sourceWarehouseId for
-    // them); Admin/Manager pick one explicitly.
+    // "From" — always server-resolved, never trusted from the client:
+    // Staff dispatch out of their own linked warehouse; Admin/Manager
+    // always dispatch out of the one Central warehouse ("Admin"'s own
+    // stock) — there is no manual source selection for either role.
     let sourceWarehouseId: string
     if (session.user.role === UserRole.Staff) {
       const ownWarehouse = await Warehouse.findOne({ managerId: session.user.id, isActive: true }).lean()
@@ -235,10 +236,11 @@ export async function recordStockOutwardAction(
         return { ok: false, error: 'Recipient name is required' }
       }
     } else {
-      if (!parsed.data.sourceWarehouseId) {
-        return { ok: false, error: 'Source warehouse is required' }
+      const centralWarehouse = await Warehouse.findOne({ type: WarehouseType.Central, isActive: true }).lean()
+      if (!centralWarehouse) {
+        return { ok: false, error: 'No Central warehouse is configured — contact an admin' }
       }
-      sourceWarehouseId = parsed.data.sourceWarehouseId
+      sourceWarehouseId = String(centralWarehouse._id)
       if (!targetWarehouseId && !recipientName) {
         return { ok: false, error: 'Select a destination warehouse or enter a recipient name' }
       }
