@@ -88,10 +88,11 @@ export type TransactionItemInput = z.infer<typeof TransactionItemInputSchema>
 
 // 1. Goods Receipt / Purchase Inward
 export const StockInwardInputSchema = z.object({
-  targetWarehouseId: z.string({ required_error: 'Target warehouse is required' }).min(1),
-  referenceNo:       z.string().trim().optional().or(z.literal('')),
-  items:             z.array(TransactionItemInputSchema).min(1, 'At least one item is required'),
-  notes:             z.string().trim().max(1000).optional().or(z.literal('')),
+  // No longer sent by the client — the destination is always the one
+  // Central warehouse, resolved server-side.
+  referenceNo: z.string().trim().optional().or(z.literal('')),
+  items:       z.array(TransactionItemInputSchema).min(1, 'At least one item is required'),
+  notes:       z.string().trim().max(1000).optional().or(z.literal('')),
 })
 
 export type StockInwardInput = z.infer<typeof StockInwardInputSchema>

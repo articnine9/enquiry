@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X, ArrowDownRight, Plus, Trash2, AlertCircle } from 'lucide-react'
+import { WarehouseType } from '@/types/enums'
 import { recordStockInwardAction } from '../actions/stock.actions'
 import type { ProductRow } from '../actions/product.actions'
 import type { WarehouseRow } from '../actions/warehouse.actions'
@@ -31,7 +32,7 @@ export default function StockInwardModal({
   products,
   warehouses,
 }: StockInwardModalProps) {
-  const [targetWarehouseId, setTargetWarehouseId] = useState(warehouses[0]?._id || '')
+  const centralWarehouse = warehouses.find(w => w.type === WarehouseType.Central)
   const [referenceNo, setReferenceNo] = useState('')
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<InwardItemRow[]>([
@@ -88,8 +89,8 @@ export default function StockInwardModal({
     e.preventDefault()
     setError(null)
 
-    if (!targetWarehouseId) {
-      setError('Please select a destination warehouse')
+    if (!centralWarehouse) {
+      setError('No Central warehouse is configured — contact an admin')
       return
     }
 
@@ -101,7 +102,6 @@ export default function StockInwardModal({
     setIsSubmitting(true)
     try {
       const res = await recordStockInwardAction({
-        targetWarehouseId,
         referenceNo: referenceNo.trim() || undefined,
         notes:       notes.trim() || undefined,
         items:       items.map(i => ({
@@ -171,18 +171,9 @@ export default function StockInwardModal({
               <label className="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1.5">
                 Destination Warehouse *
               </label>
-              <select
-                required
-                value={targetWarehouseId}
-                onChange={e => setTargetWarehouseId(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              >
-                {warehouses.map(w => (
-                  <option key={w._id} value={w._id}>
-                    {w.name} ({w.code})
-                  </option>
-                ))}
-              </select>
+              <div className="w-full px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 text-sm">
+                {centralWarehouse ? `Admin (${centralWarehouse.name})` : 'No Central warehouse configured'}
+              </div>
             </div>
 
             <div>

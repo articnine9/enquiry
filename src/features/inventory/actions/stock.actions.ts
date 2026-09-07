@@ -93,10 +93,14 @@ export async function recordStockInwardAction(
       }
     }
 
-    const { targetWarehouseId, referenceNo, items, notes } = parsed.data
-    const warehouse = await Warehouse.findById(targetWarehouseId)
+    const { referenceNo, items, notes } = parsed.data
+
+    // Destination is always the one Central warehouse ("Admin"'s own
+    // stock) — server-resolved, never trusted from the client, same as
+    // Outward's "From". There is no manual destination selection.
+    const warehouse = await Warehouse.findOne({ type: WarehouseType.Central, isActive: true })
     if (!warehouse) {
-      return { ok: false, error: 'Target warehouse not found' }
+      return { ok: false, error: 'No Central warehouse is configured — contact an admin' }
     }
 
     const transactionNo = generateTransactionNo(StockTransactionType.InwardPurchase)
