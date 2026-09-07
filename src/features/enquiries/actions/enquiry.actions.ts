@@ -514,12 +514,18 @@ export async function getEnquiryById(
       .populate('distributorId', 'name code territory')
       .populate('dealerId',      'name')
 
-    // Staff scoping — only their own enquiries
+    // Staff scoping — their own assigned enquiries, plus any enquiry they
+    // personally created (auto-assign can route a newly-created enquiry to
+    // someone else or to Admin; the creator should still be able to see the
+    // one they just submitted instead of hitting a 404 right after saving).
     if (session.user.role === UserRole.Staff) {
       const enquiry = await query.lean()
       if (!enquiry) return { ok: false, error: 'Enquiry not found' }
       const assignedToId = (enquiry.assignedTo as unknown as { _id?: unknown })?._id ?? enquiry.assignedTo
-      if (String(assignedToId) !== session.user.id) {
+      const createdById   = (enquiry.createdBy  as unknown as { _id?: unknown })?._id ?? enquiry.createdBy
+      const isAssignee = String(assignedToId) === session.user.id
+      const isCreator  = createdById != null && String(createdById) === session.user.id
+      if (!isAssignee && !isCreator) {
         return { ok: false, error: 'Enquiry not found' }
       }
       queueEscalationCheck([toEscalationCandidate(enquiry, assignedToId)])
