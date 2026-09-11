@@ -9,16 +9,17 @@ import { SlaBadge } from './SlaBadge'
 import { selectClass } from '@/components/forms/FormField'
 import {
   EnquiryStatus, ENQUIRY_STATUS_LABELS,
-  ALLOWED_TRANSITIONS,
+  ALLOWED_TRANSITIONS, TERMINAL_ENQUIRY_STATUSES,
 } from '@/types/enums'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
+import type { ActionResult } from '@/types/api'
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface StatusUpdateModalProps {
   enquiry:   EnquiryDocument
   onClose:   () => void
-  onUpdated: (enquiry: EnquiryDocument) => void
+  onUpdated: (result: { status: EnquiryStatus }) => void
 }
 
 export default function StatusUpdateModal({
@@ -29,8 +30,13 @@ export default function StatusUpdateModal({
   const dialogRef  = useRef<HTMLDialogElement>(null)
   const enquiryId  = String(enquiry._id)
 
-  const boundAction = updateEnquiryStatus.bind(null, { id: enquiryId, status: EnquiryStatus.New, note: '' })
-  const [state, formAction, isPending] = useActionState(boundAction as never, null)
+  const [state, formAction, isPending] = useActionState(
+    updateEnquiryStatus as (
+      prev: ActionResult<{ status: EnquiryStatus }> | null,
+      fd: FormData
+    ) => Promise<ActionResult<{ status: EnquiryStatus }>>,
+    null
+  )
 
   const allowedNext: EnquiryStatus[] =
     (ALLOWED_TRANSITIONS[enquiry.status] ?? []) as EnquiryStatus[]
@@ -41,12 +47,12 @@ export default function StatusUpdateModal({
 
   useEffect(() => {
     if (!state) return
-    if ((state as { ok: boolean }).ok) {
+    if (state.ok) {
       toast.success('Status updated')
-      onUpdated((state as { data: EnquiryDocument }).data)
+      onUpdated(state.data)
       onClose()
     } else {
-      toast.error((state as { error: string }).error)
+      toast.error(state.error)
     }
   }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -72,7 +78,7 @@ export default function StatusUpdateModal({
             createdAt={enquiry.createdAt}
             dueAt={enquiry.slaDueAt}
             slaMet={enquiry.slaMet}
-            isClosed={enquiry.status === EnquiryStatus.Cancelled}
+            isClosed={TERMINAL_ENQUIRY_STATUSES.includes(enquiry.status)}
             isPaused={enquiry.status === EnquiryStatus.Paused}
             showCountdown
           />

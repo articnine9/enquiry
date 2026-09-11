@@ -150,11 +150,11 @@ async function generateEnquiryNo(): Promise<string> {
 // ─── FSM: allowed status transitions ─────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<EnquiryStatus, EnquiryStatus[]> = {
-  [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Cancelled],
-  [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,    EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
-  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved,  EnquiryStatus.Cancelled],
+  [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,   EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
   [EnquiryStatus.Resolved]:   [EnquiryStatus.Closed,     EnquiryStatus.InProgress],
   [EnquiryStatus.Closed]:     [],
   [EnquiryStatus.Cancelled]:  [],

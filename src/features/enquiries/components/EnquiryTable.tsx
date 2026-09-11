@@ -16,7 +16,7 @@ import { LeadStageBadge } from './LeadStageBadge'
 import { SlaBadge } from './SlaBadge'
 import { EscalationBadge } from './EscalationBadge'
 import { cn, formatDate, getInitials } from '@/lib/utils'
-import { UserRole, EnquiryStatus, ENQUIRY_SOURCE_LABELS } from '@/types/enums'
+import { UserRole, EnquiryStatus, ENQUIRY_SOURCE_LABELS, TERMINAL_ENQUIRY_STATUSES } from '@/types/enums'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
 import type { PaginatedResult } from '@/types/api'
 
@@ -201,7 +201,7 @@ export default function EnquiryTable({
                       createdAt={enquiry.createdAt}
                       dueAt={enquiry.slaDueAt}
                       slaMet={enquiry.slaMet}
-                      isClosed={enquiry.status === EnquiryStatus.Cancelled}
+                      isClosed={TERMINAL_ENQUIRY_STATUSES.includes(enquiry.status)}
                       isPaused={enquiry.status === EnquiryStatus.Paused}
                     />
                   </td>

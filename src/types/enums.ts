@@ -366,15 +366,23 @@ export const ENQUIRY_PRODUCT_LABELS: Record<EnquiryProduct, string> = {
 
 // FSM: allowed status transitions — mirrored from Enquiry model for UI use
 export const ALLOWED_TRANSITIONS: Partial<Record<EnquiryStatus, EnquiryStatus[]>> = {
-  [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Cancelled],
-  [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,    EnquiryStatus.Resolved, EnquiryStatus.Cancelled],
-  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Cancelled],
-  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved,  EnquiryStatus.Cancelled],
+  [EnquiryStatus.New]:        [EnquiryStatus.Assigned,   EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Assigned]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.InProgress]: [EnquiryStatus.FollowUp,   EnquiryStatus.Paused,   EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.Paused]:     [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
+  [EnquiryStatus.FollowUp]:   [EnquiryStatus.InProgress, EnquiryStatus.Resolved, EnquiryStatus.Closed, EnquiryStatus.Cancelled],
   [EnquiryStatus.Resolved]:   [EnquiryStatus.Closed,     EnquiryStatus.InProgress],
   [EnquiryStatus.Closed]:     [],
   [EnquiryStatus.Cancelled]:  [],
 }
+
+// Statuses where the ticket is done and its SLA clock is no longer ticking —
+// used to feed SlaBadge's `isClosed` prop.
+export const TERMINAL_ENQUIRY_STATUSES: EnquiryStatus[] = [
+  EnquiryStatus.Resolved,
+  EnquiryStatus.Closed,
+  EnquiryStatus.Cancelled,
+]
 
 // ── Inventory Enums ───────────────────────────────────────────────────────────
 

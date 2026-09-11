@@ -16,7 +16,7 @@ import VoiceNoteSection from '@/features/voice-notes/components/VoiceNoteSection
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { labelFor, resolveMasterValue } from '@/features/settings/services/masterData.service'
 import { getCustomerByPhoneAction } from '@/features/customers/actions/customer.actions'
-import { UserRole } from '@/types/enums'
+import { UserRole, TERMINAL_ENQUIRY_STATUSES } from '@/types/enums'
 import type { Metadata } from 'next'
 import type { EnquiryDocument } from '@/lib/db/models/Enquiry'
 
@@ -218,7 +218,7 @@ export default async function EnquiryDetailPage({ params }: PageProps) {
                 createdAt={enquiry.createdAt}
                 dueAt={enquiry.slaDueAt}
                 slaMet={enquiry.slaMet}
-                isClosed={enquiry.status === 'cancelled'}
+                isClosed={TERMINAL_ENQUIRY_STATUSES.includes(enquiry.status)}
                 isPaused={enquiry.status === 'paused'}
                 showCountdown
               />

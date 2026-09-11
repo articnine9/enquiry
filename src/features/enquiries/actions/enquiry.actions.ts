@@ -370,12 +370,19 @@ export async function deleteEnquiry(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateEnquiryStatus(
-  payload: unknown
+  _prev: ActionResult<{ status: EnquiryStatus }> | null,
+  formData: FormData
 ): Promise<ActionResult<{ status: EnquiryStatus }>> {
   try {
     const session = await requirePermission('enquiry:update_status')
 
-    const parsed = UpdateStatusSchema.safeParse(payload)
+    const raw = {
+      id:     formData.get('id'),
+      status: formData.get('status'),
+      note:   formData.get('note') || undefined,
+    }
+
+    const parsed = UpdateStatusSchema.safeParse(raw)
     if (!parsed.success) {
       return {
         ok:          false,
@@ -484,6 +491,37 @@ export async function updateLeadStageAction(
         after:  { leadStage },
       },
     })
+
+    // Order delivered — auto-complete the ticket so it stops showing as
+    // "open" (escalation, SLA countdown) once its purpose is fulfilled.
+    // Only fires while the enquiry is still open; already-resolved/closed/
+    // cancelled enquiries are left untouched.
+    if (leadStage === LeadStage.Delivered) {
+      const OPEN_STATUSES = [
+        EnquiryStatus.New, EnquiryStatus.Assigned, EnquiryStatus.InProgress,
+        EnquiryStatus.Paused, EnquiryStatus.FollowUp,
+      ]
+      const hydrated = await Enquiry.findById(id)
+      if (hydrated && OPEN_STATUSES.includes(hydrated.status)) {
+        const prevStatus = hydrated.status
+        hydrated.status = EnquiryStatus.Resolved
+        hydrated.lastActionAt = now
+        hydrated.escalationNotifiedTier = null
+        await hydrated.save()
+
+        await ActivityLog.create({
+          actorId:    session.user.id,
+          actorRole:  session.user.role,
+          action:     ActivityAction.StatusChanged,
+          entityType: EntityType.Enquiry,
+          entityId:   id,
+          changes: {
+            before: { status: prevStatus },
+            after:  { status: EnquiryStatus.Resolved, note: 'Auto-resolved — order marked as delivered' },
+          },
+        })
+      }
+    }
 
     revalidateTag(CACHE_TAGS.enquiries)
     revalidateTag(CACHE_TAGS.enquiry(id))
